@@ -54,12 +54,12 @@
 
 typedef struct
 {
-    size_t width;
-    size_t paddedWidthInBytes;
-    size_t height;
-    size_t depth;
-    size_t bitsPerPixel;
-    size_t sizeInBytes;
+    int width;
+    int paddedWidthInBytes;
+    int height;
+    int depth;
+    int bitsPerPixel;
+    int sizeInBytes;
 } rfbScreenInfo, *rfbScreenInfoPtr;
 
 

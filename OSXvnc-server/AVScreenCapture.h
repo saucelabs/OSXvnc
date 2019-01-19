@@ -15,7 +15,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (readonly) CGDirectDisplayID displayID;
 
-- (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID;
+- (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID scaleFactor:(CGFloat)scaleFactor;
 - (void)start;
 - (nullable CMSampleBufferRef)lastFrame;
 - (void)stop;

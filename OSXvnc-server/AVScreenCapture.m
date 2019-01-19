@@ -17,6 +17,7 @@
 @property (nonatomic, retain, nullable) AVCaptureScreenInput *input;
 @property (nonatomic, retain) AVSampleBufferHolder *sampleBufferHolder;
 @property dispatch_queue_t sessionQueue;
+@property CGFloat scaleFactor;
 
 @end
 
@@ -24,7 +25,7 @@
 
 @synthesize displayID = _displayID;
 
-- (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID
+- (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID scaleFactor:(CGFloat)scaleFactor
 {
   if ((self = [super init])) {
     _session = nil;
@@ -32,6 +33,7 @@
     _input = nil;
     _sessionQueue = NULL;
     _displayID = displayID;
+    _scaleFactor = scaleFactor;
     _sampleBufferHolder = [[AVSampleBufferHolder alloc] init];
   }
   return self;
@@ -63,6 +65,7 @@
 
   self.input = [[AVCaptureScreenInput alloc] initWithDisplayID:self.displayID];
   self.input.capturesCursor = NO;
+  self.input.scaleFactor = self.scaleFactor;
   [self.session addInput:self.input];
   self.output = [[AVCaptureVideoDataOutput alloc] init];
   self.output.videoSettings = @{

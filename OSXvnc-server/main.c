@@ -579,32 +579,45 @@ static NSMutableData *frameBufferData;
 static size_t frameBufferBytesPerRow;
 static size_t frameBufferBitsPerPixel;
 
+BOOL CGImageWriteToFile(CGImageRef image, NSString *path) {
+  CFURLRef url = (__bridge CFURLRef)[NSURL fileURLWithPath:path];
+  CGImageDestinationRef destination = CGImageDestinationCreateWithURL(url, kUTTypePNG, 1, NULL);
+  if (!destination) {
+    NSLog(@"Failed to create CGImageDestination for %@", path);
+    return NO;
+  }
+
+  CGImageDestinationAddImage(destination, image, nil);
+
+  if (!CGImageDestinationFinalize(destination)) {
+    NSLog(@"Failed to write image to %@", path);
+    CFRelease(destination);
+    return NO;
+  }
+
+  CFRelease(destination);
+  return YES;
+}
+
 CGImageRef getRecentFrameImage(void) {
   CMSampleBufferRef sampleBuffer = [vncScreenCapture lastFrame];
   if (nil == sampleBuffer) {
     rfbLog("There was an error getting the screen shot");
     return nil;
   }
-  //  size_t width = rfbScreen.width;
-  //  size_t height = rfbScreen.height;
   CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
   CVPixelBufferLockBaseAddress(imageBuffer, 0);
-  //        if (displayScale - 1.0 < DBL_EPSILON) {
-  //          // Non-retina display.
-  //          width = CVPixelBufferGetWidth(imageBuffer);
-  //          height = CVPixelBufferGetHeight(imageBuffer);
-  //        }
-  size_t width = CVPixelBufferGetWidth(imageBuffer);
-  size_t height = CVPixelBufferGetHeight(imageBuffer);
   size_t bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
   void *baseAddress = CVPixelBufferGetBaseAddress(imageBuffer);
   CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
-  CGContextRef context = CGBitmapContextCreate(baseAddress, width, height,
+  CGContextRef context = CGBitmapContextCreate(baseAddress,
+                                               CVPixelBufferGetWidth(imageBuffer),
+                                               CVPixelBufferGetHeight(imageBuffer),
                                                8,
                                                bytesPerRow,
                                                colorspace,
                                                // For BGRA32 color space
-                                               kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipLast);
+                                               kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipFirst);
   CGColorSpaceRelease(colorspace);
   CGImageRef image = CGBitmapContextCreateImage(context);
   CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
@@ -613,10 +626,11 @@ CGImageRef getRecentFrameImage(void) {
     rfbLog("There was an error getting screen shot");
     return nil;
   }
-  CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+  CGContextDrawImage(context, CGRectMake(0, 0, rfbScreen.width, rfbScreen.height), image);
   CGImageRef imageRef = CGBitmapContextCreateImage(context);
   CGContextRelease(context);
   CGImageRelease(image);
+  CGImageWriteToFile(imageRef, @"/Users/elf/Desktop/screen.png");
   return imageRef;
 }
 
@@ -668,7 +682,14 @@ void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h) {
           rfbLog("There was an error getting the screen shot");
           return;
         }
+        if (x + w > rfbScreen.width) {
+          w = (int)rfbScreen.width - x;
+        }
+        if (y + h > rfbScreen.height) {
+          h = (int)rfbScreen.height - y;
+        }
         CGImageRef imageRef = CGImageCreateWithImageInRect(fullImageRef, CGRectMake(x,y,w,h));
+        CGImageWriteToFile(imageRef, @"/Users/elf/Desktop/partial_screen.png");
         CGImageRelease(fullImageRef);
         CGDataProviderRef dataProvider = CGImageGetDataProvider(imageRef);
         CFDataRef dataRef = CGDataProviderCopyData(dataProvider);
@@ -695,8 +716,8 @@ void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h) {
 static bool rfbScreenInit(void) {
     /* Note: As of 10.7 there doesn't appear to be an easy way to get the bitsPerSample or samplesPerPixel of the screen buffer. It looks like that information may be in the bitsPerComponent and componentCount elements of the IOPixelInformation structure. But we'd have to get into poorly-documented IOKit functions to get it. It seems very unlikely that it will be anything other than 8 bits and 3 samples, and in any case we're not really prepared to handle anything else, so the best we could do is die gracefully. Now we are likely to die ungracefully (or maybe just produce garbage) if the screen buffer is in a different format.
      */
-    size_t bitsPerSample = 8; // Let's presume 8 bits x 3 samples and hope for the best.....
-    size_t samplesPerPixel = 3;
+    int bitsPerSample = 8; // Let's presume 8 bits x 3 samples and hope for the best.....
+    int samplesPerPixel = 3;
 
     [frameBufferData release]; // release previous screen buffer, if any
     frameBufferData = nil;
@@ -722,7 +743,7 @@ static bool rfbScreenInit(void) {
         [vncScreenCapture release];
         vncScreenCapture = nil;
     }
-    vncScreenCapture = [[AVScreenCapture alloc] initWithDisplayID:displayID];
+    vncScreenCapture = [[AVScreenCapture alloc] initWithDisplayID:displayID scaleFactor:1.0 / displayScale];
     [vncScreenCapture start];
 
     rfbScreen.width = CGDisplayPixelsWide(displayID);
