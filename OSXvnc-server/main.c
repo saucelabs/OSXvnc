@@ -579,6 +579,7 @@ static NSMutableData *frameBufferData;
 static size_t frameBufferBytesPerRow;
 static size_t frameBufferBitsPerPixel;
 
+// this method is used for debug purposes
 BOOL CGImageWriteToFile(CGImageRef image, NSString *path) {
   CFURLRef url = (__bridge CFURLRef)[NSURL fileURLWithPath:path];
   CGImageDestinationRef destination = CGImageDestinationCreateWithURL(url, kUTTypePNG, 1, NULL);
@@ -630,7 +631,7 @@ CGImageRef getRecentFrameImage(void) {
   CGImageRef imageRef = CGBitmapContextCreateImage(context);
   CGContextRelease(context);
   CGImageRelease(image);
-  CGImageWriteToFile(imageRef, @"/Users/elf/Desktop/screen.png");
+//  CGImageWriteToFile(imageRef, @"/Users/elf/Desktop/screen.png");
   return imageRef;
 }
 
@@ -682,14 +683,8 @@ void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h) {
           rfbLog("There was an error getting the screen shot");
           return;
         }
-        if (x + w > rfbScreen.width) {
-          w = (int)rfbScreen.width - x;
-        }
-        if (y + h > rfbScreen.height) {
-          h = (int)rfbScreen.height - y;
-        }
         CGImageRef imageRef = CGImageCreateWithImageInRect(fullImageRef, CGRectMake(x,y,w,h));
-        CGImageWriteToFile(imageRef, @"/Users/elf/Desktop/partial_screen.png");
+//        CGImageWriteToFile(imageRef, @"/Users/elf/Desktop/partial_screen.png");
         CGImageRelease(fullImageRef);
         CGDataProviderRef dataProvider = CGImageGetDataProvider(imageRef);
         CFDataRef dataRef = CGDataProviderCopyData(dataProvider);
