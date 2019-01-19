@@ -580,40 +580,42 @@ static size_t frameBufferBitsPerPixel;
 char *rfbGetFramebuffer(void) {
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
         if (!frameBufferData) {
-            CGImageRef imageRef;
-            if (displayScale > 1.0) {
-                // Retina display.
-                size_t width = rfbScreen.width;
-                size_t height = rfbScreen.height;
-                CGImageRef image = CGDisplayCreateImage(displayID);
-                CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
-                CGContextRef context = CGBitmapContextCreate(NULL, width, height,
-                                                             CGImageGetBitsPerComponent(image),
-                                                             CGImageGetBytesPerRow(image),
-                                                             colorspace,
-                                                             kCGImageAlphaNoneSkipLast);
-
-                CGColorSpaceRelease(colorspace);
-                if (context == NULL) {
-                    rfbLog("There was an error getting screen shot");
-                    return nil;
-                }
-                CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
-                imageRef = CGBitmapContextCreateImage(context);
-                CGContextRelease(context);
-                CGImageRelease(image);
-            } else {
-                imageRef = CGDisplayCreateImage(displayID);
-            }
-            CGDataProviderRef dataProvider = CGImageGetDataProvider (imageRef);
-            CFDataRef dataRef = CGDataProviderCopyData(dataProvider);
-            frameBufferBytesPerRow = CGImageGetBytesPerRow(imageRef);
-            frameBufferBitsPerPixel = CGImageGetBitsPerPixel(imageRef);
-            frameBufferData = [(NSData *)dataRef mutableCopy];
-            CFRelease(dataRef);
-
-            if (imageRef != NULL)
-                CGImageRelease(imageRef);
+            
+            
+//            CGImageRef imageRef;
+//            if (displayScale > 1.0) {
+//                // Retina display.
+//                size_t width = rfbScreen.width;
+//                size_t height = rfbScreen.height;
+//                CGImageRef image = CGDisplayCreateImage(displayID);
+//                CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
+//                CGContextRef context = CGBitmapContextCreate(NULL, width, height,
+//                                                             CGImageGetBitsPerComponent(image),
+//                                                             CGImageGetBytesPerRow(image),
+//                                                             colorspace,
+//                                                             kCGImageAlphaNoneSkipLast);
+//
+//                CGColorSpaceRelease(colorspace);
+//                if (context == NULL) {
+//                    rfbLog("There was an error getting screen shot");
+//                    return nil;
+//                }
+//                CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+//                imageRef = CGBitmapContextCreateImage(context);
+//                CGContextRelease(context);
+//                CGImageRelease(image);
+//            } else {
+//                imageRef = CGDisplayCreateImage(displayID);
+//            }
+//            CGDataProviderRef dataProvider = CGImageGetDataProvider (imageRef);
+//            CFDataRef dataRef = CGDataProviderCopyData(dataProvider);
+//            frameBufferBytesPerRow = CGImageGetBytesPerRow(imageRef);
+//            frameBufferBitsPerPixel = CGImageGetBitsPerPixel(imageRef);
+//            frameBufferData = [(NSData *)dataRef mutableCopy];
+//            CFRelease(dataRef);
+//
+//            if (imageRef != NULL)
+//                CGImageRelease(imageRef);
         }
         return frameBufferData.mutableBytes;
     }
