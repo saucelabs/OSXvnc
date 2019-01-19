@@ -111,7 +111,6 @@ void rfbSendClientList() {
                                                                     object:[NSString stringWithFormat:@"OSXvnc%d",rfbPort]
                                                                   userInfo:@{@"clientList": clientList}];
 
-    [clientList dealloc];
     [pool release];
 
     pthread_mutex_unlock(&rfbClientListMutex);
