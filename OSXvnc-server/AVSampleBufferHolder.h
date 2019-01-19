@@ -1,8 +1,9 @@
 //
 //  AVSampleBuffer.h
-//  OSXvnc-server
+//  OSXvnc
 //
 //  Created by Mykola Mokhnach on 19.01.19.
+//  Copyright (c) 2019 Sauce Labs Inc. All rights reserved.
 //
 
 #import <Foundation/Foundation.h>

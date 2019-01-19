@@ -1,8 +1,9 @@
 //
 //  AVSampleBuffer.m
-//  OSXvnc-server
+//  OSXvnc
 //
 //  Created by Mykola Mokhnach on 19.01.19.
+//  Copyright (c) 2019 Sauce Labs Inc. All rights reserved.
 //
 
 #import "AVSampleBufferHolder.h"
@@ -11,7 +12,7 @@
 @implementation AVSampleBufferHolder
 
 - (void)dealloc {
-  if (_sampleBuffer != nil) {
+  if (nil != _sampleBuffer) {
     CFRelease(_sampleBuffer);
   }
 
@@ -19,13 +20,12 @@
 }
 
 - (void)setSampleBuffer:(CMSampleBufferRef)sampleBuffer {
-  if (_sampleBuffer != nil) {
+  if (nil != _sampleBuffer) {
     CFRelease(_sampleBuffer);
     _sampleBuffer = nil;
   }
 
   _sampleBuffer = sampleBuffer;
-
   if (nil != sampleBuffer) {
     CFRetain(sampleBuffer);
   }

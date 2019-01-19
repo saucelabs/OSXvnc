@@ -3,7 +3,7 @@
 //  OSXvnc
 //
 //  Created by Mykola Mokhnach on Mon Jan 14 2019.
-//  Copyright (c) 2019 Sauce Labds Inc. All rights reserved.
+//  Copyright (c) 2019 Sauce Labs Inc. All rights reserved.
 //
 
 #import "AVScreenCapture.h"
@@ -17,13 +17,13 @@
 @property (nonatomic, retain, nullable) AVCaptureScreenInput *input;
 @property (nonatomic, retain) AVSampleBufferHolder *sampleBufferHolder;
 @property dispatch_queue_t sessionQueue;
-@property CGFloat scaleFactor;
 
 @end
 
 @implementation AVScreenCapture
 
 @synthesize displayID = _displayID;
+@synthesize scaleFactor = _scaleFactor;
 
 - (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID scaleFactor:(CGFloat)scaleFactor
 {
@@ -74,7 +74,7 @@
   self.output.alwaysDiscardsLateVideoFrames = YES;
   [self.session addOutput:self.output];
   dispatch_queue_attr_t queueAttributes = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, DISPATCH_QUEUE_PRIORITY_HIGH);
-  self.sessionQueue = dispatch_queue_create("com.osxvnc.avscreencapture", queueAttributes);
+  self.sessionQueue = dispatch_queue_create("de.uni-mannheim.VineServer.avscreencapture", queueAttributes);
   [self.output setSampleBufferDelegate:self queue:self.sessionQueue];
 
   [self.session startRunning];
