@@ -24,13 +24,14 @@
 
 @synthesize displayID = _displayID;
 
-- (instancetype)init
+- (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID
 {
   if ((self = [super init])) {
     _session = nil;
     _output = nil;
     _input = nil;
     _sessionQueue = NULL;
+    _displayID = displayID;
     _sampleBufferHolder = [[AVSampleBufferHolder alloc] init];
   }
   return self;
@@ -50,17 +51,19 @@
   [super dealloc];
 }
 
-- (void)startForDisplay:(CGDirectDisplayID)displayID
+- (void)start
 {
+  if (nil != self.session) {
+    return;
+  }
+
   [self stop];
 
   self.session = [[AVCaptureSession alloc] init];
 
-  _displayID = displayID;
-  self.input = [[AVCaptureScreenInput alloc] initWithDisplayID:displayID];
+  self.input = [[AVCaptureScreenInput alloc] initWithDisplayID:self.displayID];
   self.input.capturesCursor = NO;
   [self.session addInput:self.input];
-
   self.output = [[AVCaptureVideoDataOutput alloc] init];
   self.output.videoSettings = @{
     (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)

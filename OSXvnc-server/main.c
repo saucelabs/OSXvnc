@@ -38,6 +38,7 @@
 #include "rfb.h"
 
 #include "rfbserver.h"
+#import "AVScreenCapture.h"
 #import "VNCServer.h"
 
 static ScreenRec hackScreen;
@@ -110,6 +111,7 @@ CGDisplayErr displayErr;
 rfbserver thisServer;
 
 VNCServer *vncServerObject = nil;
+AVScreenCapture *vncScreenCapture = nil;
 
 static bool rfbScreenInit(void);
 
@@ -577,47 +579,66 @@ static NSMutableData *frameBufferData;
 static size_t frameBufferBytesPerRow;
 static size_t frameBufferBitsPerPixel;
 
+CGImageRef getRecentFrameImage(void) {
+  CMSampleBufferRef sampleBuffer = [vncScreenCapture lastFrame];
+  if (nil == sampleBuffer) {
+    rfbLog("There was an error getting the screen shot");
+    return nil;
+  }
+  //  size_t width = rfbScreen.width;
+  //  size_t height = rfbScreen.height;
+  CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+  CVPixelBufferLockBaseAddress(imageBuffer, 0);
+  //        if (displayScale - 1.0 < DBL_EPSILON) {
+  //          // Non-retina display.
+  //          width = CVPixelBufferGetWidth(imageBuffer);
+  //          height = CVPixelBufferGetHeight(imageBuffer);
+  //        }
+  size_t width = CVPixelBufferGetWidth(imageBuffer);
+  size_t height = CVPixelBufferGetHeight(imageBuffer);
+  size_t bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
+  void *baseAddress = CVPixelBufferGetBaseAddress(imageBuffer);
+  CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
+  CGContextRef context = CGBitmapContextCreate(baseAddress, width, height,
+                                               8,
+                                               bytesPerRow,
+                                               colorspace,
+                                               // For BGRA32 color space
+                                               kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipLast);
+  CGColorSpaceRelease(colorspace);
+  CGImageRef image = CGBitmapContextCreateImage(context);
+  CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
+  CFRelease(sampleBuffer);
+  if (context == NULL) {
+    rfbLog("There was an error getting screen shot");
+    return nil;
+  }
+  CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+  CGImageRef imageRef = CGBitmapContextCreateImage(context);
+  CGContextRelease(context);
+  CGImageRelease(image);
+  return imageRef;
+}
+
 char *rfbGetFramebuffer(void) {
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
-        if (!frameBufferData) {
-            
-            
-//            CGImageRef imageRef;
-//            if (displayScale > 1.0) {
-//                // Retina display.
-//                size_t width = rfbScreen.width;
-//                size_t height = rfbScreen.height;
-//                CGImageRef image = CGDisplayCreateImage(displayID);
-//                CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
-//                CGContextRef context = CGBitmapContextCreate(NULL, width, height,
-//                                                             CGImageGetBitsPerComponent(image),
-//                                                             CGImageGetBytesPerRow(image),
-//                                                             colorspace,
-//                                                             kCGImageAlphaNoneSkipLast);
-//
-//                CGColorSpaceRelease(colorspace);
-//                if (context == NULL) {
-//                    rfbLog("There was an error getting screen shot");
-//                    return nil;
-//                }
-//                CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
-//                imageRef = CGBitmapContextCreateImage(context);
-//                CGContextRelease(context);
-//                CGImageRelease(image);
-//            } else {
-//                imageRef = CGDisplayCreateImage(displayID);
-//            }
-//            CGDataProviderRef dataProvider = CGImageGetDataProvider (imageRef);
-//            CFDataRef dataRef = CGDataProviderCopyData(dataProvider);
-//            frameBufferBytesPerRow = CGImageGetBytesPerRow(imageRef);
-//            frameBufferBitsPerPixel = CGImageGetBitsPerPixel(imageRef);
-//            frameBufferData = [(NSData *)dataRef mutableCopy];
-//            CFRelease(dataRef);
-//
-//            if (imageRef != NULL)
-//                CGImageRelease(imageRef);
+      if (!frameBufferData) {
+        CGImageRef imageRef = getRecentFrameImage();
+        if (nil == imageRef) {
+          rfbLog("There was an error getting the screen shot");
+          return nil;
         }
-        return frameBufferData.mutableBytes;
+        CGDataProviderRef dataProvider = CGImageGetDataProvider(imageRef);
+        CFDataRef dataRef = CGDataProviderCopyData(dataProvider);
+        frameBufferBytesPerRow = CGImageGetBytesPerRow(imageRef);
+        frameBufferBitsPerPixel = CGImageGetBitsPerPixel(imageRef);
+        frameBufferData = [(NSData *)dataRef mutableCopy];
+        CFRelease(dataRef);
+
+        if (nil != imageRef)
+          CGImageRelease(imageRef);
+      }
+      return frameBufferData.mutableBytes;
     }
     else { // Old API is required for off screen user sessions
         int maxWait =   5000000;
@@ -642,26 +663,14 @@ char *rfbGetFramebuffer(void) {
 // Called to get record updates of the requested region into our framebuffer
 void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h) {
     if (frameBufferData) {
-        CGRect rect = CGRectMake (x,y,w,h);
-        CGImageRef imageRef;
-        if (displayScale > 1.0) {
-            // Retina display.
-            CGImageRef image = CGDisplayCreateImageForRect(displayID, rect);
-            CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
-            CGBitmapInfo bitmapInfo = kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipFirst;
-            CGContextRef context = CGBitmapContextCreate(NULL, w, h, 8, w * 4,colorspace, bitmapInfo);
-            CGColorSpaceRelease(colorspace);
-            if (context == NULL) {
-                rfbLog("There was an error getting scaled images");
-                return;
-            }
-            CGContextDrawImage(context, CGRectMake(0, 0, w, h), image);
-            imageRef = CGBitmapContextCreateImage(context);
-            CGContextRelease(context);
-        } else {
-            imageRef = CGDisplayCreateImageForRect(displayID, rect);
+        CGImageRef fullImageRef = getRecentFrameImage();
+        if (nil == fullImageRef) {
+          rfbLog("There was an error getting the screen shot");
+          return;
         }
-        CGDataProviderRef dataProvider = CGImageGetDataProvider (imageRef);
+        CGImageRef imageRef = CGImageCreateWithImageInRect(fullImageRef, CGRectMake(x,y,w,h));
+        CGImageRelease(fullImageRef);
+        CGDataProviderRef dataProvider = CGImageGetDataProvider(imageRef);
         CFDataRef dataRef = CGDataProviderCopyData(dataProvider);
         size_t imgBytesPerRow = CGImageGetBytesPerRow(imageRef);
         size_t imgBitsPerPixel = CGImageGetBitsPerPixel(imageRef);
@@ -686,8 +695,8 @@ void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h) {
 static bool rfbScreenInit(void) {
     /* Note: As of 10.7 there doesn't appear to be an easy way to get the bitsPerSample or samplesPerPixel of the screen buffer. It looks like that information may be in the bitsPerComponent and componentCount elements of the IOPixelInformation structure. But we'd have to get into poorly-documented IOKit functions to get it. It seems very unlikely that it will be anything other than 8 bits and 3 samples, and in any case we're not really prepared to handle anything else, so the best we could do is die gracefully. Now we are likely to die ungracefully (or maybe just produce garbage) if the screen buffer is in a different format.
      */
-    int bitsPerSample = 8; // Let's presume 8 bits x 3 samples and hope for the best.....
-    int samplesPerPixel = 3;
+    size_t bitsPerSample = 8; // Let's presume 8 bits x 3 samples and hope for the best.....
+    size_t samplesPerPixel = 3;
 
     [frameBufferData release]; // release previous screen buffer, if any
     frameBufferData = nil;
@@ -708,41 +717,27 @@ static bool rfbScreenInit(void) {
         rfbLog("Detected HiDPI Display with scaling factor of %f", displayScale);
     }
 
+    if (nil != vncScreenCapture) {
+        [vncScreenCapture stop];
+        [vncScreenCapture release];
+        vncScreenCapture = nil;
+    }
+    vncScreenCapture = [[AVScreenCapture alloc] initWithDisplayID:displayID];
+    [vncScreenCapture start];
+
     rfbScreen.width = CGDisplayPixelsWide(displayID);
     rfbScreen.height = CGDisplayPixelsHigh(displayID);
     rfbScreen.bitsPerPixel = bitsPerPixelForDisplay(displayID);
     rfbScreen.depth = samplesPerPixel * bitsPerSample;
     //Fix for Yosemite and above
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
-        CGImageRef imageRef;
-        // Check to see if retina display.
-        if (displayScale > 1.0) {
-            size_t width = rfbScreen.width;
-            size_t height = rfbScreen.height;
-            CGImageRef image = CGDisplayCreateImage(displayID);
-            CGColorSpaceRef colorspace = CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB);
-            CGContextRef context = CGBitmapContextCreate(NULL, width, height,
-                                                         CGImageGetBitsPerComponent(image),
-                                                         CGImageGetBytesPerRow(image),
-                                                         colorspace,
-                                                         kCGImageAlphaNoneSkipLast);
-
-            CGColorSpaceRelease(colorspace);
-            if (context == NULL) {
-                rfbLog("There was an error getting screen shot");
-                return nil;
-            }
-            CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
-            imageRef = CGBitmapContextCreateImage(context);
-            CGContextRelease(context);
-        } else {
-            imageRef = CGDisplayCreateImage(displayID);
-        }
+        // Let it collect a frame
+        [NSThread sleepForTimeInterval:1.0f];
+        CGImageRef imageRef = getRecentFrameImage();
         rfbScreen.paddedWidthInBytes = CGImageGetBytesPerRow(imageRef);
-        if (imageRef != NULL)
+        if (nil != imageRef)
             CGImageRelease(imageRef);
-    }
-    else {
+    } else {
         rfbScreen.paddedWidthInBytes = CGDisplayBytesPerRow(displayID);
     }
     rfbServerFormat.bitsPerPixel = rfbScreen.bitsPerPixel;
@@ -1326,6 +1321,8 @@ int main(int argc, char *argv[]) {
         CGReleaseScreenRefreshRects( rectArray );
     }
 #endif
+
+    [vncScreenCapture stop];
 
     [tempPool release];
 
