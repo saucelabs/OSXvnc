@@ -940,7 +940,7 @@ void rfbProcessClientNormalMessage(rfbClientPtr cl) {
                 }
                 else {
                     cl->scalingFrameBuffer = malloc( csw*csh*rfbScreen.bitsPerPixel/8 );
-                    cl->scalingPaddedWidthInBytes = csw * rfbScreen.bitsPerPixel/8;
+                    cl->scalingPaddedWidthInBytes = (int) (csw * rfbScreen.bitsPerPixel/8);
                 }
 
                 /* Now notify the client of the new desktop area */
@@ -1041,7 +1041,7 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl, RegionRec updateRegion) {
             nUpdateRegionRects += n;
         }
     } else {
-        nUpdateRegionRects = REGION_NUM_RECTS(&updateRegion);
+        nUpdateRegionRects = (uint32_t) REGION_NUM_RECTS(&updateRegion);
     }
 
     // Sometimes send the mouse cursor update also

@@ -117,7 +117,9 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
   return buffer;
 }
 
-- (void)captureOutput:(AVCaptureOutput *)output didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer fromConnection:(AVCaptureConnection *)connection {
+- (void)captureOutput:(AVCaptureOutput *)output
+didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
+       fromConnection:(AVCaptureConnection *)connection {
     self.sampleBufferHolder.sampleBuffer = sampleBuffer;
 }
 

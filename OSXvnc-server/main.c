@@ -299,7 +299,7 @@ void rfbCheckForScreenResolutionChange() {
                         // Reset Frame Buffer
                         free(cl->scalingFrameBuffer);
                         cl->scalingFrameBuffer = malloc( csw*csh*rfbScreen.bitsPerPixel/8 );
-                        cl->scalingPaddedWidthInBytes = csw * rfbScreen.bitsPerPixel/8;
+                        cl->scalingPaddedWidthInBytes = (int) (csw * rfbScreen.bitsPerPixel/8);
                     }
 
                     box.x1 = box.y1 = 0;
@@ -741,8 +741,8 @@ static bool rfbScreenInit(void) {
     vncScreenCapture = [[AVScreenCapture alloc] initWithDisplayID:displayID scaleFactor:1.0 / displayScale];
     [vncScreenCapture start];
 
-    rfbScreen.width = CGDisplayPixelsWide(displayID);
-    rfbScreen.height = CGDisplayPixelsHigh(displayID);
+    rfbScreen.width = (int) CGDisplayPixelsWide(displayID);
+    rfbScreen.height = (int) CGDisplayPixelsHigh(displayID);
     rfbScreen.bitsPerPixel = bitsPerPixelForDisplay(displayID);
     rfbScreen.depth = samplesPerPixel * bitsPerSample;
     //Fix for Yosemite and above
@@ -750,11 +750,11 @@ static bool rfbScreenInit(void) {
         // Let it collect a frame
         [NSThread sleepForTimeInterval:1.0f];
         CGImageRef imageRef = getRecentFrameImage();
-        rfbScreen.paddedWidthInBytes = CGImageGetBytesPerRow(imageRef);
+        rfbScreen.paddedWidthInBytes = (int) CGImageGetBytesPerRow(imageRef);
         if (nil != imageRef)
             CGImageRelease(imageRef);
     } else {
-        rfbScreen.paddedWidthInBytes = CGDisplayBytesPerRow(displayID);
+        rfbScreen.paddedWidthInBytes = (int) CGDisplayBytesPerRow(displayID);
     }
     rfbServerFormat.bitsPerPixel = rfbScreen.bitsPerPixel;
     rfbServerFormat.depth = rfbScreen.depth;
