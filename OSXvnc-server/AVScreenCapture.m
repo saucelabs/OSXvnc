@@ -67,7 +67,7 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
   self.session = [[AVCaptureSession alloc] init];
 
   self.input = [[AVCaptureScreenInput alloc] initWithDisplayID:self.displayID];
-  self.input.capturesCursor = NO;
+  self.input.capturesCursor = YES;
   self.input.scaleFactor = self.scaleFactor;
   self.input.minFrameDuration = CMTimeMake(1, CAPTURE_FRAMES_PER_SECOND);
   [self.session addInput:self.input];
