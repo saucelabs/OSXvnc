@@ -7,8 +7,11 @@
 //
 
 #import "AVScreenCapture.h"
+
 #import <AppKit/AppKit.h>
 #import "AVSampleBufferHolder.h"
+
+static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
 
 @interface AVScreenCapture() <AVCaptureVideoDataOutputSampleBufferDelegate>
 
@@ -16,7 +19,7 @@
 @property (nonatomic, retain, nullable) AVCaptureVideoDataOutput *output;
 @property (nonatomic, retain, nullable) AVCaptureScreenInput *input;
 @property (nonatomic, retain) AVSampleBufferHolder *sampleBufferHolder;
-@property dispatch_queue_t sessionQueue;
+@property (nonatomic) dispatch_queue_t sessionQueue;
 
 @end
 
@@ -66,6 +69,7 @@
   self.input = [[AVCaptureScreenInput alloc] initWithDisplayID:self.displayID];
   self.input.capturesCursor = NO;
   self.input.scaleFactor = self.scaleFactor;
+  self.input.minFrameDuration = CMTimeMake(1, CAPTURE_FRAMES_PER_SECOND);
   [self.session addInput:self.input];
   self.output = [[AVCaptureVideoDataOutput alloc] init];
   self.output.videoSettings = @{

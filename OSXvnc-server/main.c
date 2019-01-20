@@ -702,7 +702,7 @@ void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h) {
             source += imgBytesPerRow;
         }
 
-        if (imageRef != NULL)
+        if (nil != imageRef)
             CGImageRelease(imageRef);
         [(id)dataRef release];
     }
