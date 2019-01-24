@@ -623,7 +623,7 @@ typedef struct {
     uint8_t green;
     uint8_t red;
     uint8_t alpha;
-} rgb_pixel_t;
+} pixel_t;
 // The incoming buffer is always BGRA32
 const size_t bufferBytesPerPixel = 4;
 
@@ -651,9 +651,9 @@ char *getRecentFrameData(CGRect cropRect, size_t *frameSize, size_t *bytesPerRow
         height = cropRect.size.height;
     }
     // Convert pixels from BGRA to RGB color space
-    const size_t pixelsLength = sizeof (rgb_pixel_t) * width * height;
-    rgb_pixel_t *rgbPixels = malloc(pixelsLength);
-    rgb_pixel_t *pixelOut = rgbPixels;
+    const size_t pixelsLength = sizeof (pixel_t) * width * height;
+    pixel_t *pixels = malloc(pixelsLength);
+    pixel_t *pixelOut = pixels;
     uint8_t *pixelIn;
     for (size_t y = top; y < top + height; y++) {
         for (size_t x = left; x < left + width; x++) {
@@ -670,11 +670,11 @@ char *getRecentFrameData(CGRect cropRect, size_t *frameSize, size_t *bytesPerRow
     CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
     CFRelease(sampleBuffer);
     
-    *bytesPerRow = sizeof (rgb_pixel_t) * width;
-    *bitsPerPixel = sizeof (rgb_pixel_t) * 8;
+    *bytesPerRow = sizeof (pixel_t) * width;
+    *bitsPerPixel = sizeof (pixel_t) * 8;
     *frameSize = pixelsLength;
 
-    return (char *)rgbPixels;
+    return (char *)pixels;
 }
 
 char *rfbGetFramebuffer(void) {
