@@ -580,6 +580,44 @@ static size_t frameBufferBytesPerRow;
 static size_t frameBufferBitsPerPixel;
 
 // this method is used for debug purposes
+BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, size_t bytesPerRow, NSString *path) {
+    CFURLRef url = (__bridge CFURLRef)[NSURL fileURLWithPath:path];
+    CGImageDestinationRef destination = CGImageDestinationCreateWithURL(url, kUTTypePNG, 1, NULL);
+    if (!destination) {
+        NSLog(@"Failed to create CGImageDestination for %@", path);
+        return NO;
+    }
+    
+    CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(data,
+                                                 width,
+                                                 height,
+                                                 8,
+                                                 bytesPerRow,
+                                                 colorspace,
+                                                 // For RGB color space
+                                                 kCGImageAlphaNone);
+    CGColorSpaceRelease(colorspace);
+    CGImageRef image = CGBitmapContextCreateImage(context);
+    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+    CGImageRef imageRef = CGBitmapContextCreateImage(context);
+    CGContextRelease(context);
+    CGImageRelease(image);
+    
+    CGImageDestinationAddImage(destination, imageRef, nil);
+    
+    if (!CGImageDestinationFinalize(destination)) {
+        NSLog(@"Failed to write image to %@", path);
+        CFRelease(destination);
+        return NO;
+    }
+    
+    CFRelease(destination);
+    CFRelease(imageRef);
+    return YES;
+}
+
+// this method is used for debug purposes
 BOOL CGImageWriteToFile(CGImageRef image, NSString *path) {
   CFURLRef url = (__bridge CFURLRef)[NSURL fileURLWithPath:path];
   CGImageDestinationRef destination = CGImageDestinationCreateWithURL(url, kUTTypePNG, 1, NULL);
@@ -600,112 +638,147 @@ BOOL CGImageWriteToFile(CGImageRef image, NSString *path) {
   return YES;
 }
 
-CGImageRef getRecentFrameImage(void) {
-  CMSampleBufferRef sampleBuffer = [vncScreenCapture lastFrame];
-  if (nil == sampleBuffer) {
-    rfbLog("There was an error getting the screen shot");
-    return nil;
-  }
-  CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-  CVPixelBufferLockBaseAddress(imageBuffer, 0);
-  size_t bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
-  void *baseAddress = CVPixelBufferGetBaseAddress(imageBuffer);
-  CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
-  CGContextRef context = CGBitmapContextCreate(baseAddress,
-                                               CVPixelBufferGetWidth(imageBuffer),
-                                               CVPixelBufferGetHeight(imageBuffer),
-                                               8,
-                                               bytesPerRow,
-                                               colorspace,
-                                               // For BGRA32 color space
-                                               kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipFirst);
-  CGColorSpaceRelease(colorspace);
-  CGImageRef image = CGBitmapContextCreateImage(context);
-  CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
-  CFRelease(sampleBuffer);
-  if (context == NULL) {
-    rfbLog("There was an error getting screen shot");
-    return nil;
-  }
-  CGContextDrawImage(context, CGRectMake(0, 0, rfbScreen.width, rfbScreen.height), image);
-  CGImageRef imageRef = CGBitmapContextCreateImage(context);
-  CGContextRelease(context);
-  CGImageRelease(image);
-//  CGImageWriteToFile(imageRef, @"/Users/elf/Desktop/screen.png");
-  return imageRef;
+typedef struct {
+    uint8_t red;
+    uint8_t green;
+    uint8_t blue;
+} rgb_pixel_t;
+// The incoming buffer is always BGRA32
+const size_t bufferBytesPerPixel = 4;
+
+char *getRecentFrameData(CGRect cropRect, size_t *frameSize, size_t *bytesPerRow, size_t *bitsPerPixel) {
+    CMSampleBufferRef sampleBuffer = [vncScreenCapture lastFrame];
+    if (nil == sampleBuffer) {
+        rfbLog("There was an error getting the screen shot");
+        return nil;
+    }
+    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+    CVPixelBufferLockBaseAddress(imageBuffer, 0);
+    size_t bufferBytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
+    void *baseAddress = CVPixelBufferGetBaseAddress(imageBuffer);
+    size_t width = CVPixelBufferGetWidth(imageBuffer);
+    size_t height = CVPixelBufferGetHeight(imageBuffer);
+    const BOOL shouldCropRect = !CGRectIsNull(cropRect) && CGRectContainsRect(CGRectMake(0, 0, width, height), cropRect);
+    if (shouldCropRect) {
+        width = cropRect.size.width;
+        height = cropRect.size.height;
+        baseAddress += (size_t)cropRect.origin.y * bufferBytesPerRow + bufferBytesPerPixel * (size_t)cropRect.origin.x;
+    }
+    // Convert pixels from BGRA to RGB color space
+    const size_t pixelsLength = sizeof (rgb_pixel_t) * width * height;
+    rgb_pixel_t *rgbPixels = malloc(pixelsLength);
+    uint8_t *pixelIn = baseAddress;
+    rgb_pixel_t *pixelOut = rgbPixels;
+    for (size_t pixelIdx = 0; pixelIdx < width * height; pixelIdx++) {
+        pixelOut->blue  = *(pixelIn++);
+        pixelOut->green = *(pixelIn++);
+        pixelOut->red   = *(pixelIn++);
+        pixelIn++; // ignore alpha
+        pixelOut++; // to next pixel
+    }
+    pixelIn = NULL;
+    pixelOut = NULL;
+    CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
+    CFRelease(sampleBuffer);
+    
+    *bytesPerRow = sizeof (rgb_pixel_t) * width;
+    *bitsPerPixel = sizeof (rgb_pixel_t) * 8;
+    *frameSize = pixelsLength;
+
+    return (char *)rgbPixels;
 }
+
+//CGImageRef getRecentFrameImage(CGRect cropRect) {
+//    CMSampleBufferRef sampleBuffer = [vncScreenCapture lastFrame];
+//    if (nil == sampleBuffer) {
+//        rfbLog("There was an error getting the screen shot");
+//        return nil;
+//    }
+//    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+//    CVPixelBufferLockBaseAddress(imageBuffer, 0);
+//    size_t bytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
+//    void *baseAddress = CVPixelBufferGetBaseAddress(imageBuffer);
+//    size_t width = CVPixelBufferGetWidth(imageBuffer);
+//    size_t height = CVPixelBufferGetHeight(imageBuffer);
+//    if (!CGRectIsNull(cropRect) && CGRectContainsRect(CGRectMake(0, 0, width, height), cropRect)) {
+//        width = cropRect.size.width;
+//        height = cropRect.size.height;
+//        baseAddress += (size_t)cropRect.origin.y * bytesPerRow + 4 * (size_t)cropRect.origin.x;
+//    }
+//    CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
+//    CGContextRef context = CGBitmapContextCreate(baseAddress,
+//                                                 width,
+//                                                 height,
+//                                                 8,
+//                                                 bytesPerRow,
+//                                                 colorspace,
+//                                                 // For BGRA32 color space
+//                                                 kCGBitmapByteOrder32Little | kCGImageAlphaNoneSkipFirst);
+//    CGColorSpaceRelease(colorspace);
+//    CGImageRef image = CGBitmapContextCreateImage(context);
+//    CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
+//    CFRelease(sampleBuffer);
+//    if (context == NULL) {
+//        rfbLog("There was an error getting screen shot");
+//        return nil;
+//    }
+//    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
+//    CGImageRef imageRef = CGBitmapContextCreateImage(context);
+//    CGContextRelease(context);
+//    CGImageRelease(image);
+////    CGImageWriteToFile(imageRef, @"/Users/mykolamokhnach/Desktop/screen.png");
+//    return imageRef;
+//}
 
 char *rfbGetFramebuffer(void) {
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
-      if (!frameBufferData) {
-        CGImageRef imageRef = getRecentFrameImage();
-        if (nil == imageRef) {
-          rfbLog("There was an error getting the screen shot");
-          return nil;
+        if (!frameBufferData) {
+            size_t frameDataLength;
+            char *frameData = getRecentFrameData(CGRectNull, &frameDataLength, &frameBufferBytesPerRow, &frameBufferBitsPerPixel);
+            if (nil != frameData) {
+                frameBufferData = [NSMutableData dataWithBytes:frameData length:frameDataLength];
+                free(frameData);
+            }
         }
-        CGDataProviderRef dataProvider = CGImageGetDataProvider(imageRef);
-        CFDataRef dataRef = CGDataProviderCopyData(dataProvider);
-        frameBufferBytesPerRow = CGImageGetBytesPerRow(imageRef);
-        frameBufferBitsPerPixel = CGImageGetBitsPerPixel(imageRef);
-        frameBufferData = [(NSData *)dataRef mutableCopy];
-        CFRelease(dataRef);
-
-        if (nil != imageRef)
-          CGImageRelease(imageRef);
-      }
-      return frameBufferData.mutableBytes;
+        return frameBufferData.mutableBytes;
     }
-    else { // Old API is required for off screen user sessions
-        int maxWait =   5000000;
-        int retryWait =  500000;
+    
+    // Old API is required for off screen user sessions
+    int maxWait =   5000000;
+    int retryWait =  500000;
 
-        char *returnValue = (char *)CGDisplayBaseAddress(displayID);
-        while (!returnValue && maxWait > 0) {
-            NSLog(@"Unable to obtain base address");
-            usleep(retryWait); // Buffer goes away while screen is "switching", it'll be back
-            maxWait -= retryWait;
-            returnValue = (char *)CGDisplayBaseAddress(displayID);
-        }
-        if (!returnValue) {
-            NSLog(@"Unable to obtain base address -- Giving up");
-            exit(1);
-        }
-
-        return returnValue;
+    char *returnValue = (char *)CGDisplayBaseAddress(displayID);
+    while (!returnValue && maxWait > 0) {
+        NSLog(@"Unable to obtain base address");
+        usleep(retryWait); // Buffer goes away while screen is "switching", it'll be back
+        maxWait -= retryWait;
+        returnValue = (char *)CGDisplayBaseAddress(displayID);
     }
+    if (!returnValue) {
+        NSLog(@"Unable to obtain base address -- Giving up");
+        exit(1);
+    }
+
+    return returnValue;
 }
 
 // Called to get record updates of the requested region into our framebuffer
 void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h) {
-    if (frameBufferData) {
-        CGImageRef fullImageRef = getRecentFrameImage();
-        if (nil == fullImageRef) {
-          rfbLog("There was an error getting the screen shot");
-          return;
-        }
-        CGImageRef imageRef = CGImageCreateWithImageInRect(fullImageRef, CGRectMake(x,y,w,h));
-//        CGImageWriteToFile(imageRef, @"/Users/elf/Desktop/partial_screen.png");
-        CGImageRelease(fullImageRef);
-        CGDataProviderRef dataProvider = CGImageGetDataProvider(imageRef);
-        CFDataRef dataRef = CGDataProviderCopyData(dataProvider);
-        size_t imgBytesPerRow = CGImageGetBytesPerRow(imageRef);
-        size_t imgBitsPerPixel = CGImageGetBitsPerPixel(imageRef);
-        if (imgBitsPerPixel != frameBufferBitsPerPixel)
-            NSLog(@"BitsPerPixel MISMATCH: frameBuffer %zu, rect image %zu", frameBufferBitsPerPixel, imgBitsPerPixel);
-
-        char *dest = (char *)frameBufferData.mutableBytes + frameBufferBytesPerRow * y + x * (frameBufferBitsPerPixel/8);
-        const char *source = ((NSData *)dataRef).bytes;
-
-        while (h--) {
-            memcpy(dest, source, w*(imgBitsPerPixel/8));
-            dest += frameBufferBytesPerRow;
-            source += imgBytesPerRow;
-        }
-
-        if (nil != imageRef)
-            CGImageRelease(imageRef);
-        [(id)dataRef release];
+    if (!frameBufferData) {
+        return;
     }
+    
+    char *dest = (char *)frameBufferData.mutableBytes + frameBufferBytesPerRow * y + x * (frameBufferBitsPerPixel/8);
+    size_t frameDataLength, imgBytesPerRow, imgBitsPerPixel;
+    char *croppedBuffer = getRecentFrameData(CGRectMake(x, y, w, h), &frameDataLength, &imgBytesPerRow, &imgBitsPerPixel);
+    char *source = croppedBuffer;
+    while (h--) {
+        memcpy(dest, source, w*(imgBitsPerPixel/8));
+        dest += frameBufferBytesPerRow;
+        source += imgBytesPerRow;
+    }
+    source = NULL;
+    free(croppedBuffer);
 }
 
 static bool rfbScreenInit(void) {
@@ -749,10 +822,22 @@ static bool rfbScreenInit(void) {
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
         // Let it collect a frame
         [NSThread sleepForTimeInterval:1.0f];
-        CGImageRef imageRef = getRecentFrameImage();
-        rfbScreen.paddedWidthInBytes = (int) CGImageGetBytesPerRow(imageRef);
-        if (nil != imageRef)
-            CGImageRelease(imageRef);
+//        size_t frameDataLength, imgBytesPerRow, imgBitsPerPixel;
+//        char *frameData = getRecentFrameData(CGRectNull, &frameDataLength, &imgBytesPerRow, &imgBitsPerPixel);
+//        if (nil != frameData) {
+//            size_t width = imgBytesPerRow / (imgBitsPerPixel / 8);
+//            size_t height = frameDataLength / width / (imgBitsPerPixel / 8);
+//            CGBitapDataWriteToFile(frameData, width, height, imgBytesPerRow, @"/Users/mykolamokhnach/Desktop/screen.png");
+//            free(frameData);
+//        }
+        CMSampleBufferRef sampleBuffer = [vncScreenCapture lastFrame];
+        if (nil != sampleBuffer) {
+            CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+            CVPixelBufferLockBaseAddress(imageBuffer, 0);
+            rfbScreen.paddedWidthInBytes = (int) CVPixelBufferGetBytesPerRow(imageBuffer);
+            CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
+            CFRelease(sampleBuffer);
+        }
     } else {
         rfbScreen.paddedWidthInBytes = (int) CGDisplayBytesPerRow(displayID);
     }
