@@ -575,9 +575,10 @@ void connectReverseClient(char *hostName, int portNum) {
     }
 }
 
+static const size_t BYTES_PER_PIXEL = 4;
+
 static NSMutableData *frameBufferData;
 static size_t frameBufferBytesPerRow;
-static size_t frameBufferBitsPerPixel;
 
 // this method can be used for debug purposes
 BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, size_t bytesPerRow, NSString *path) {
@@ -618,70 +619,61 @@ BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, size_t byte
     return YES;
 }
 
-typedef struct {
-    uint8_t blue;
-    uint8_t green;
-    uint8_t red;
-    uint8_t alpha;
-} pixel_t;
-// The incoming buffer is always BGRA32
-const size_t bufferBytesPerPixel = 4;
-
-char *getRecentFrameData(CGRect cropRect, size_t *frameSize, size_t *bytesPerRow, size_t *bitsPerPixel) {
+char *getRecentFrameData(CGRect cropRect, size_t *frameSize, size_t *bytesPerRow) {
     CMSampleBufferRef sampleBuffer = [vncScreenCapture lastFrame];
     if (nil == sampleBuffer) {
         rfbLog("There was an error getting the screen shot");
         return nil;
     }
-    CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-    CVPixelBufferLockBaseAddress(imageBuffer, 0);
-    const size_t bufferBytesPerRow = CVPixelBufferGetBytesPerRow(imageBuffer);
-    void *baseAddress = CVPixelBufferGetBaseAddress(imageBuffer);
-    const size_t bufferWidth = CVPixelBufferGetWidth(imageBuffer);
-    const size_t bufferHeight = CVPixelBufferGetHeight(imageBuffer);
-    const BOOL shouldCropRect = !CGRectIsNull(cropRect) && CGRectContainsRect(CGRectMake(0, 0, bufferWidth, bufferHeight), cropRect);
-    size_t width = bufferWidth;
-    size_t height = bufferHeight;
-    size_t left = 0;
-    size_t top = 0;
-    if (shouldCropRect) {
-        left = cropRect.origin.x;
-        top = cropRect.origin.y;
-        width = cropRect.size.width;
-        height = cropRect.size.height;
+    // The incoming buffer is always BGRA32-encoded
+    CVImageBufferRef screenBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+    CVPixelBufferLockBaseAddress(screenBuffer, 0);
+    const size_t screenBytesPerRow = CVPixelBufferGetBytesPerRow(screenBuffer);
+    char *baseAddress = CVPixelBufferGetBaseAddress(screenBuffer);
+    const size_t screenWidth = CVPixelBufferGetWidth(screenBuffer);
+    const size_t screenHeight = CVPixelBufferGetHeight(screenBuffer);
+    const CGRect screenRect = CGRectMake(0, 0, screenWidth, screenHeight);
+    size_t cropWidth = screenWidth;
+    size_t cropHeight = screenHeight;
+    size_t cropLeft = 0;
+    size_t cropTop = 0;
+    const BOOL shouldTakeFullScreen = CGRectIsNull(cropRect) || CGRectEqualToRect(screenRect, cropRect);
+    if (!shouldTakeFullScreen) {
+        cropLeft = cropRect.origin.x;
+        cropTop = cropRect.origin.y;
+        cropWidth = cropRect.size.width;
+        cropHeight = cropRect.size.height;
     }
-    // Convert pixels from BGRA to RGB color space
-    const size_t pixelsLength = sizeof (pixel_t) * width * height;
-    pixel_t *pixels = malloc(pixelsLength);
-    pixel_t *pixelOut = pixels;
-    uint8_t *pixelIn;
-    for (size_t y = top; y < top + height; y++) {
-        for (size_t x = left; x < left + width; x++) {
-            pixelIn = baseAddress + y * bufferBytesPerRow + bufferBytesPerPixel * x;
-            pixelOut->blue  = *(pixelIn++);
-            pixelOut->green = *(pixelIn++);
-            pixelOut->red   = *(pixelIn++);
-            pixelOut->alpha = *(pixelIn++);
-            pixelOut++; // to next pixel
+    const size_t pixelsLength = BYTES_PER_PIXEL * cropWidth * cropHeight;
+    char *pixels = malloc(pixelsLength);
+    char *byteOffsetIn = baseAddress + cropTop * screenBytesPerRow + BYTES_PER_PIXEL * cropLeft;
+    char *byteOffsetOut = pixels;
+    const size_t cropBytesInRow = cropWidth * BYTES_PER_PIXEL;
+    if (cropWidth == screenWidth) {
+        memcpy(byteOffsetOut, byteOffsetIn, pixelsLength);
+    } else {
+        while (byteOffsetOut < pixels + pixelsLength) {
+            memcpy(byteOffsetOut, byteOffsetIn, cropBytesInRow);
+            byteOffsetIn += screenBytesPerRow;
+            byteOffsetOut += cropBytesInRow;
         }
     }
-    pixelIn = NULL;
-    pixelOut = NULL;
-    CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
+    byteOffsetIn = NULL;
+    byteOffsetOut = NULL;
+    CVPixelBufferUnlockBaseAddress(screenBuffer, 0);
     CFRelease(sampleBuffer);
     
-    *bytesPerRow = sizeof (pixel_t) * width;
-    *bitsPerPixel = sizeof (pixel_t) * 8;
+    *bytesPerRow = cropBytesInRow;
     *frameSize = pixelsLength;
-
-    return (char *)pixels;
+    
+    return pixels;
 }
 
 char *rfbGetFramebuffer(void) {
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
         if (!frameBufferData) {
             size_t frameDataLength;
-            char *frameData = getRecentFrameData(CGRectNull, &frameDataLength, &frameBufferBytesPerRow, &frameBufferBitsPerPixel);
+            char *frameData = getRecentFrameData(CGRectNull, &frameDataLength, &frameBufferBytesPerRow);
             if (nil != frameData) {
                 frameBufferData = [NSMutableData dataWithBytes:frameData length:frameDataLength];
                 free(frameData);
@@ -715,16 +707,26 @@ void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h) {
         return;
     }
    
-    char *dest = (char *)frameBufferData.mutableBytes + frameBufferBytesPerRow * y + x * (frameBufferBitsPerPixel/8);
-    size_t frameDataLength, imgBytesPerRow, imgBitsPerPixel;
-    char *croppedBuffer = getRecentFrameData(CGRectMake(x, y, w, h), &frameDataLength, &imgBytesPerRow, &imgBitsPerPixel);
-    char *source = croppedBuffer;
-    while (h--) {
-        memcpy(dest, source, w * (imgBitsPerPixel / 8));
-        dest += frameBufferBytesPerRow;
-        source += imgBytesPerRow;
+    char *dest = (char *)frameBufferData.mutableBytes + frameBufferBytesPerRow * y + x * BYTES_PER_PIXEL;
+    size_t frameDataLength, imgBytesPerRow;
+    char *croppedBuffer = getRecentFrameData(CGRectMake(x, y, w, h), &frameDataLength, &imgBytesPerRow);
+    if (nil == croppedBuffer) {
+        NSLog(@"Unable to obtain the recent frame data");
+        return;
     }
-    source = NULL;
+    char *byteOffsetOut = dest;
+    char *byteOffsetIn = croppedBuffer;
+    if (w == rfbScreen.width && x % rfbScreen.width == 0) {
+        memcpy(byteOffsetOut, byteOffsetIn, frameDataLength);
+    } else {
+        while (byteOffsetIn < croppedBuffer + frameDataLength) {
+            memcpy(byteOffsetOut, byteOffsetIn, imgBytesPerRow);
+            byteOffsetOut += frameBufferBytesPerRow;
+            byteOffsetIn += imgBytesPerRow;
+        }
+    }
+    byteOffsetOut = NULL;
+    byteOffsetIn = NULL;
     free(croppedBuffer);
 }
 
