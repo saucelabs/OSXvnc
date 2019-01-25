@@ -576,12 +576,10 @@ void connectReverseClient(char *hostName, int portNum) {
 }
 
 static const size_t BYTES_PER_PIXEL = 4;
-
-static NSMutableData *frameBufferData;
-static size_t frameBufferBytesPerRow;
+static char *frameBufferData = NULL;
 
 // this method can be used for debug purposes
-BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, size_t bytesPerRow, NSString *path) {
+BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, NSString *path) {
     CFURLRef url = (__bridge CFURLRef)[NSURL fileURLWithPath:path];
     CGImageDestinationRef destination = CGImageDestinationCreateWithURL(url, kUTTypePNG, 1, NULL);
     CFRelease(url);
@@ -595,7 +593,7 @@ BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, size_t byte
                                                  width,
                                                  height,
                                                  8,
-                                                 bytesPerRow,
+                                                 BYTES_PER_PIXEL * width,
                                                  colorspace,
                                                  // For RGBA color space
                                                  kCGImageAlphaNoneSkipLast);
@@ -619,7 +617,7 @@ BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, size_t byte
     return YES;
 }
 
-char *getRecentFrameData(CGRect cropRect, size_t *frameSize, size_t *bytesPerRow) {
+char *getRecentFrameData(void) {
     CMSampleBufferRef sampleBuffer = [vncScreenCapture lastFrame];
     if (nil == sampleBuffer) {
         rfbLog("There was an error getting the screen shot");
@@ -628,58 +626,26 @@ char *getRecentFrameData(CGRect cropRect, size_t *frameSize, size_t *bytesPerRow
     // The incoming buffer is always BGRA32-encoded
     CVImageBufferRef screenBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
     CVPixelBufferLockBaseAddress(screenBuffer, 0);
-    const size_t screenBytesPerRow = CVPixelBufferGetBytesPerRow(screenBuffer);
     char *baseAddress = CVPixelBufferGetBaseAddress(screenBuffer);
     const size_t screenWidth = CVPixelBufferGetWidth(screenBuffer);
     const size_t screenHeight = CVPixelBufferGetHeight(screenBuffer);
-    const CGRect screenRect = CGRectMake(0, 0, screenWidth, screenHeight);
-    size_t cropWidth = screenWidth;
-    size_t cropHeight = screenHeight;
-    size_t cropLeft = 0;
-    size_t cropTop = 0;
-    const BOOL shouldTakeFullScreen = CGRectIsNull(cropRect) || CGRectEqualToRect(screenRect, cropRect);
-    if (!shouldTakeFullScreen) {
-        cropLeft = cropRect.origin.x;
-        cropTop = cropRect.origin.y;
-        cropWidth = cropRect.size.width;
-        cropHeight = cropRect.size.height;
-    }
-    const size_t pixelsLength = BYTES_PER_PIXEL * cropWidth * cropHeight;
+    const size_t pixelsLength = BYTES_PER_PIXEL * screenWidth * screenHeight;
     char *pixels = malloc(pixelsLength);
-    char *byteOffsetIn = baseAddress + cropTop * screenBytesPerRow + BYTES_PER_PIXEL * cropLeft;
-    char *byteOffsetOut = pixels;
-    const size_t cropBytesInRow = cropWidth * BYTES_PER_PIXEL;
-    if (cropWidth == screenWidth) {
-        memcpy(byteOffsetOut, byteOffsetIn, pixelsLength);
-    } else {
-        while (byteOffsetOut < pixels + pixelsLength) {
-            memcpy(byteOffsetOut, byteOffsetIn, cropBytesInRow);
-            byteOffsetIn += screenBytesPerRow;
-            byteOffsetOut += cropBytesInRow;
-        }
-    }
-    byteOffsetIn = NULL;
-    byteOffsetOut = NULL;
+    memcpy(pixels, baseAddress, pixelsLength);
     CVPixelBufferUnlockBaseAddress(screenBuffer, 0);
     CFRelease(sampleBuffer);
-    
-    *bytesPerRow = cropBytesInRow;
-    *frameSize = pixelsLength;
-    
     return pixels;
 }
 
 char *rfbGetFramebuffer(void) {
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
-        if (!frameBufferData) {
-            size_t frameDataLength;
-            char *frameData = getRecentFrameData(CGRectNull, &frameDataLength, &frameBufferBytesPerRow);
+        if (NULL == frameBufferData) {
+            char *frameData = getRecentFrameData();
             if (nil != frameData) {
-                frameBufferData = [NSMutableData dataWithBytes:frameData length:frameDataLength];
-                free(frameData);
+                frameBufferData = frameData;
             }
         }
-        return frameBufferData.mutableBytes;
+        return frameBufferData;
     }
     
     // Old API is required for off screen user sessions
@@ -702,32 +668,19 @@ char *rfbGetFramebuffer(void) {
 }
 
 // Called to get record updates of the requested region into our framebuffer
+// With AVScreenCapture framework there is no point in cutting of screen areas,
+// since the provider anyway returns the whole screen
 void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h) {
-    if (!frameBufferData) {
+    char *frameData = getRecentFrameData();
+    if (nil == frameData) {
+        rfbLog("Cannot retrieve the frame data");
         return;
     }
-   
-    char *dest = (char *)frameBufferData.mutableBytes + frameBufferBytesPerRow * y + x * BYTES_PER_PIXEL;
-    size_t frameDataLength, imgBytesPerRow;
-    char *croppedBuffer = getRecentFrameData(CGRectMake(x, y, w, h), &frameDataLength, &imgBytesPerRow);
-    if (nil == croppedBuffer) {
-        NSLog(@"Unable to obtain the recent frame data");
-        return;
+    
+    if (NULL != frameBufferData) {
+        free(frameBufferData);
     }
-    char *byteOffsetOut = dest;
-    char *byteOffsetIn = croppedBuffer;
-    if (w == rfbScreen.width && x % rfbScreen.width == 0) {
-        memcpy(byteOffsetOut, byteOffsetIn, frameDataLength);
-    } else {
-        while (byteOffsetIn < croppedBuffer + frameDataLength) {
-            memcpy(byteOffsetOut, byteOffsetIn, imgBytesPerRow);
-            byteOffsetOut += frameBufferBytesPerRow;
-            byteOffsetIn += imgBytesPerRow;
-        }
-    }
-    byteOffsetOut = NULL;
-    byteOffsetIn = NULL;
-    free(croppedBuffer);
+    frameBufferData = frameData;
 }
 
 static bool rfbScreenInit(void) {
@@ -736,8 +689,10 @@ static bool rfbScreenInit(void) {
     int bitsPerSample = 8; // Let's presume 8 bits x 3 samples and hope for the best.....
     int samplesPerPixel = 3;
 
-    [frameBufferData release]; // release previous screen buffer, if any
-    frameBufferData = nil;
+    if (NULL != frameBufferData) {
+        free(frameBufferData); // release previous screen buffer, if any
+    }
+    frameBufferData = NULL;
 
     if (displayID == 0) {
         // The display was not selected up to now, so choose the main display.
