@@ -725,8 +725,7 @@ static bool rfbScreenInit(void) {
     //Fix for Yosemite and above
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
         // Let it collect a frame
-        [NSThread sleepForTimeInterval:1.0f];
-        CMSampleBufferRef sampleBuffer = [vncScreenCapture lastFrame];
+        CMSampleBufferRef sampleBuffer = [vncScreenCapture frameWithTimeout:2.0];
         if (nil != sampleBuffer) {
             CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
             CVPixelBufferLockBaseAddress(imageBuffer, 0);

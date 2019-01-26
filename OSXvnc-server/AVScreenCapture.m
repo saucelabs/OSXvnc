@@ -20,6 +20,7 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
 @property (nonatomic, retain, nullable) AVCaptureScreenInput *input;
 @property (nonatomic, retain) AVSampleBufferHolder *sampleBufferHolder;
 @property (nonatomic) dispatch_queue_t sessionQueue;
+@property (nonatomic, nullable) dispatch_semaphore_t firstFrameSemaphore;
 
 @end
 
@@ -37,6 +38,7 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
     _sessionQueue = NULL;
     _displayID = displayID;
     _scaleFactor = scaleFactor;
+    _firstFrameSemaphore = NULL;
     _sampleBufferHolder = [[AVSampleBufferHolder alloc] init];
   }
   return self;
@@ -73,8 +75,8 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
   [self.session addInput:self.input];
   self.output = [[AVCaptureVideoDataOutput alloc] init];
   self.output.videoSettings = @{
-    (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)
-  };
+                                (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_32BGRA)
+                                };
   self.output.alwaysDiscardsLateVideoFrames = YES;
   [self.session addOutput:self.output];
   dispatch_queue_attr_t queueAttributes = dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, DISPATCH_QUEUE_PRIORITY_HIGH);
@@ -82,6 +84,7 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
   [self.output setSampleBufferDelegate:self queue:self.sessionQueue];
 
   [self.session startRunning];
+  self.firstFrameSemaphore = dispatch_semaphore_create(0);
 }
 
 - (void)stop
@@ -99,6 +102,12 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
   self.output = nil;
   [self.session release];
   self.session = nil;
+
+  if (NULL != self.firstFrameSemaphore) {
+    dispatch_release(self.firstFrameSemaphore);
+    self.firstFrameSemaphore = NULL;
+  }
+
 }
 
 - (CMSampleBufferRef)lastFrame
@@ -117,10 +126,24 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
   return buffer;
 }
 
+- (CMSampleBufferRef)frameWithTimeout:(NSTimeInterval)timeout
+{
+  if (NULL != self.firstFrameSemaphore &&
+      0 == dispatch_semaphore_wait(self.firstFrameSemaphore,
+                                   dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC)))) {
+    dispatch_release(self.firstFrameSemaphore);
+    self.firstFrameSemaphore = NULL;
+  }
+  return self.lastFrame;
+}
+
 - (void)captureOutput:(AVCaptureOutput *)output
 didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
        fromConnection:(AVCaptureConnection *)connection {
-    self.sampleBufferHolder.sampleBuffer = sampleBuffer;
+  self.sampleBufferHolder.sampleBuffer = sampleBuffer;
+  if (NULL != self.firstFrameSemaphore) {
+    dispatch_semaphore_signal(self.firstFrameSemaphore);
+  }
 }
 
 @end

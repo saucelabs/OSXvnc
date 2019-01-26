@@ -19,6 +19,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID scaleFactor:(CGFloat)scaleFactor;
 - (void)start;
 - (nullable CMSampleBufferRef)lastFrame;
+- (nullable CMSampleBufferRef)frameWithTimeout:(NSTimeInterval)timeout;
 - (void)stop;
 
 @end
