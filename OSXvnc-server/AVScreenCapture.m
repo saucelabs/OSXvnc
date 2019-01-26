@@ -11,7 +11,8 @@
 #import <AppKit/AppKit.h>
 #import "AVSampleBufferHolder.h"
 
-static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
+static const int32_t MIN_FPS = 15;
+static const int32_t MAX_FPS = 60;
 
 @interface AVScreenCapture() <AVCaptureVideoDataOutputSampleBufferDelegate>
 
@@ -20,7 +21,7 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
 @property (nonatomic, retain, nullable) AVCaptureScreenInput *input;
 @property (nonatomic, retain) AVSampleBufferHolder *sampleBufferHolder;
 @property (nonatomic) dispatch_queue_t sessionQueue;
-@property (nonatomic, nullable) dispatch_semaphore_t firstFrameSemaphore;
+@property (nonatomic, nullable) dispatch_semaphore_t nextFrameSemaphore;
 
 @end
 
@@ -38,7 +39,7 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
     _sessionQueue = NULL;
     _displayID = displayID;
     _scaleFactor = scaleFactor;
-    _firstFrameSemaphore = NULL;
+    _nextFrameSemaphore = NULL;
     _sampleBufferHolder = [[AVSampleBufferHolder alloc] init];
   }
   return self;
@@ -58,7 +59,7 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
   [super dealloc];
 }
 
-- (void)start
+- (void)startWithFps:(int32_t)fps
 {
   if (nil != self.session) {
     return;
@@ -71,7 +72,7 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
   self.input = [[AVCaptureScreenInput alloc] initWithDisplayID:self.displayID];
   self.input.capturesCursor = NO;
   self.input.scaleFactor = self.scaleFactor;
-  self.input.minFrameDuration = CMTimeMake(1, CAPTURE_FRAMES_PER_SECOND);
+  self.input.minFrameDuration = CMTimeMake(1, MAX(MIN_FPS, MIN(fps, MAX_FPS)));
   [self.session addInput:self.input];
   self.output = [[AVCaptureVideoDataOutput alloc] init];
   self.output.videoSettings = @{
@@ -84,7 +85,6 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
   [self.output setSampleBufferDelegate:self queue:self.sessionQueue];
 
   [self.session startRunning];
-  self.firstFrameSemaphore = dispatch_semaphore_create(0);
 }
 
 - (void)stop
@@ -103,9 +103,9 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
   [self.session release];
   self.session = nil;
 
-  if (NULL != self.firstFrameSemaphore) {
-    dispatch_release(self.firstFrameSemaphore);
-    self.firstFrameSemaphore = NULL;
+  if (NULL != self.nextFrameSemaphore) {
+    dispatch_release(self.nextFrameSemaphore);
+    self.nextFrameSemaphore = NULL;
   }
 
 }
@@ -126,14 +126,21 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
   return buffer;
 }
 
-- (CMSampleBufferRef)frameWithTimeout:(NSTimeInterval)timeout
+- (CMSampleBufferRef)nextFrameWithTimeout:(NSTimeInterval)timeout
 {
-  if (NULL != self.firstFrameSemaphore &&
-      0 == dispatch_semaphore_wait(self.firstFrameSemaphore,
-                                   dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC)))) {
-    dispatch_release(self.firstFrameSemaphore);
-    self.firstFrameSemaphore = NULL;
+  if (nil == self.session) {
+    return nil;
   }
+
+  self.nextFrameSemaphore = dispatch_semaphore_create(0);
+  BOOL didFrameArrive = 0 == dispatch_semaphore_wait(self.nextFrameSemaphore,
+                                                     dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC)));
+  dispatch_release(self.nextFrameSemaphore);
+  self.nextFrameSemaphore = NULL;
+  if (!didFrameArrive) {
+    return nil;
+  }
+
   return self.lastFrame;
 }
 
@@ -141,8 +148,8 @@ static const NSUInteger CAPTURE_FRAMES_PER_SECOND = 25;
 didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
        fromConnection:(AVCaptureConnection *)connection {
   self.sampleBufferHolder.sampleBuffer = sampleBuffer;
-  if (NULL != self.firstFrameSemaphore) {
-    dispatch_semaphore_signal(self.firstFrameSemaphore);
+  if (NULL != self.nextFrameSemaphore) {
+    dispatch_semaphore_signal(self.nextFrameSemaphore);
   }
 }
 

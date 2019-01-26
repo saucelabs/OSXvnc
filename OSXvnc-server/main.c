@@ -100,7 +100,7 @@ void * CGDisplayBaseAddress ( CGDirectDisplayID display );
 
 extern void rfbScreensaverTimer(EventLoopTimerRef timer, void *userData);
 
-int rfbDeferUpdateTime = 25; /* in ms */
+int rfbDeferUpdateTime = 40; /* in ms */
 
 static char reverseHost[256] = "";
 static int reversePort = 5500;
@@ -328,6 +328,8 @@ void rfbCheckForScreenResolutionChange() {
     }
 }
 
+static const NSTimeInterval UI_REFRESH_INTERVAL = 0.1;
+
 static void *clientOutput(void *data) {
     rfbClientPtr cl = (rfbClientPtr)data;
     RegionRec updateRegion;
@@ -349,41 +351,12 @@ static void *clientOutput(void *data) {
 
             // Only do checks if we HAVE an outstanding request
             if (REGION_NOTEMPTY(&hackScreen, &cl->requestedRegion)) {
-                /* REDSTONE */
-                if (rfbDeferUpdateTime > 0 && !cl->immediateUpdate) {
-                    // Compare Request with Update Area
-                    REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
-                    REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
-                    haveUpdate = REGION_NOTEMPTY(&hackScreen, &updateRegion);
-
-                    REGION_UNINIT(&hackScreen, &updateRegion);
-                }
-                else {
-                    /*  If we've turned off deferred updating
-                    We are going to send an update as soon as we have a requested,
-                    regardless of if we have a "change" intersection */
-                    haveUpdate = TRUE;
-                }
-
-                if (rfbShouldSendNewCursor(cl))
-                    haveUpdate = TRUE;
-                else if (rfbShouldSendNewPosition(cl))
-                    // Could Compare with the request area but for now just always send it
-                    haveUpdate = TRUE;
-                else if (cl->needNewScreenSize)
-                    haveUpdate = TRUE;
+                NSLog(@"has update");
+                haveUpdate = TRUE;
             }
 
             if (!haveUpdate)
                 pthread_cond_wait(&cl->updateCond, &cl->updateMutex);
-        }
-
-        // OK, now, to save bandwidth, wait a little while for more updates to come along.
-        /* REDSTONE - Lets send it right away if no rfbDeferUpdateTime */
-        if (rfbDeferUpdateTime > 0 && !cl->immediateUpdate && !cl->needNewScreenSize) {
-            pthread_mutex_unlock(&cl->updateMutex);
-            usleep(rfbDeferUpdateTime * 1000);
-            pthread_mutex_lock(&cl->updateMutex);
         }
 
         /* Now, get the region we're going to update, and remove
@@ -392,11 +365,18 @@ static void *clientOutput(void *data) {
             is updated, we'll be sure to do another update later. */
         REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
         REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
-        REGION_SUBTRACT(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &updateRegion);
+        __block RegionRec processedRegion;
+        REGION_INIT(&hackScreen, &processedRegion, NullBox, 0);
+        REGION_COPY(&hackScreen, &processedRegion, &updateRegion);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(UI_REFRESH_INTERVAL * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+          REGION_SUBTRACT(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &processedRegion);
+          REGION_UNINIT(&hackScreen, &processedRegion);
+        });
+//        REGION_SUBTRACT(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &updateRegion);
         /* REDSTONE - We also want to clear out the requested region, so we don't process
             graphic updates in previously requested regions */
         REGION_UNINIT(&hackScreen, &cl->requestedRegion);
-        REGION_INIT(&hackScreen, &cl->requestedRegion,NullBox,0);
+        REGION_INIT(&hackScreen, &cl->requestedRegion, NullBox, 0);
 
         /*  This does happen but it's asynchronous (and slow to occur)
             what we really want to happen is to just temporarily hide the cursor (while sending to the remote screen)
@@ -408,6 +388,15 @@ static void *clientOutput(void *data) {
                                             */
 
         /* Now actually send the update. */
+//        RegionRec screenRegion;
+//        BoxRec screenRect;
+//        screenRect.x1 = 0;
+//        screenRect.x2 = rfbScreen.width;
+//        screenRect.y1 = 0;
+//        screenRect.y2 = rfbScreen.height;
+//        screenRegion.extents = screenRect;
+//        screenRegion.data = NULL;
+//        rfbSendFramebufferUpdate(cl, screenRegion);
         rfbSendFramebufferUpdate(cl, updateRegion);
         /* If we were hiding it before make it reappear now
             displayErr = CGDisplayShowCursor(displayID);
@@ -617,8 +606,9 @@ BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, NSString *p
     return YES;
 }
 
-char *getRecentFrameData(void) {
-    CMSampleBufferRef sampleBuffer = [vncScreenCapture lastFrame];
+char *getRecentFrameData(size_t *dataLength) {
+//    CMSampleBufferRef sampleBuffer = [vncScreenCapture nextFrameWithTimeout:UI_REFRESH_INTERVAL];
+    CMSampleBufferRef sampleBuffer = vncScreenCapture.lastFrame;
     if (nil == sampleBuffer) {
         rfbLog("There was an error getting the screen shot");
         return nil;
@@ -634,13 +624,15 @@ char *getRecentFrameData(void) {
     memcpy(pixels, baseAddress, pixelsLength);
     CVPixelBufferUnlockBaseAddress(screenBuffer, 0);
     CFRelease(sampleBuffer);
+    *dataLength = pixelsLength;
     return pixels;
 }
 
 char *rfbGetFramebuffer(void) {
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
         if (NULL == frameBufferData) {
-            char *frameData = getRecentFrameData();
+            size_t length;
+            char *frameData = getRecentFrameData(&length);
             if (nil != frameData) {
                 frameBufferData = frameData;
             }
@@ -671,16 +663,14 @@ char *rfbGetFramebuffer(void) {
 // With AVScreenCapture framework there is no point in cutting of screen areas,
 // since the provider anyway returns the whole screen
 void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h) {
-    char *frameData = getRecentFrameData();
+    size_t dataLength;
+    char *frameData = getRecentFrameData(&dataLength);
     if (nil == frameData) {
         rfbLog("Cannot retrieve the frame data");
         return;
     }
-    
-    if (NULL != frameBufferData) {
-        free(frameBufferData);
-    }
-    frameBufferData = frameData;
+    memcpy(frameBufferData, frameData, dataLength);
+    free(frameData);
 }
 
 static bool rfbScreenInit(void) {
@@ -716,7 +706,7 @@ static bool rfbScreenInit(void) {
         vncScreenCapture = nil;
     }
     vncScreenCapture = [[AVScreenCapture alloc] initWithDisplayID:displayID scaleFactor:1.0 / displayScale];
-    [vncScreenCapture start];
+    [vncScreenCapture startWithFps: rfbDeferUpdateTime > 0 ? 1000.0 / rfbDeferUpdateTime : 15];
 
     rfbScreen.width = (int) CGDisplayPixelsWide(displayID);
     rfbScreen.height = (int) CGDisplayPixelsHigh(displayID);
@@ -725,7 +715,7 @@ static bool rfbScreenInit(void) {
     //Fix for Yosemite and above
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
         // Let it collect a frame
-        CMSampleBufferRef sampleBuffer = [vncScreenCapture frameWithTimeout:2.0];
+        CMSampleBufferRef sampleBuffer = [vncScreenCapture nextFrameWithTimeout:2.0];
         if (nil != sampleBuffer) {
             CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
             CVPixelBufferLockBaseAddress(imageBuffer, 0);

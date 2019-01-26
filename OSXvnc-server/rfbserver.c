@@ -806,6 +806,7 @@ void rfbProcessClientNormalMessage(rfbClientPtr cl) {
             RegionRec tmpRegion;
             BoxRec box;
 
+            NSLog(@"Got update request");
             if ((n = ReadExact(cl, ((char *)&msg) + 1,
                                sz_rfbFramebufferUpdateRequestMsg-1)) <= 0) {
                 if (n != 0)
@@ -999,6 +1000,7 @@ void rfbProcessClientNormalMessage(rfbClientPtr cl) {
  */
 
 Bool rfbSendFramebufferUpdate(rfbClientPtr cl, RegionRec updateRegion) {
+    NSLog(@"Sending framebuffer");
     int i;
     uint32_t nUpdateRegionRects = 0;
     Bool sendRichCursorEncoding = FALSE;
@@ -1092,14 +1094,13 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl, RegionRec updateRegion) {
 
     cl->screenBuffer = rfbGetFramebuffer();
 
+    rfbGetFramebufferUpdateInRect(x, y, w, h);
+
     for (i = 0; i < REGION_NUM_RECTS(&updateRegion); i++) {
         uint32_t x = REGION_RECTS(&updateRegion)[i].x1;
         uint32_t y = REGION_RECTS(&updateRegion)[i].y1;
         uint32_t w = REGION_RECTS(&updateRegion)[i].x2 - x;
         uint32_t h = REGION_RECTS(&updateRegion)[i].y2 - y;
-
-        rfbGetFramebufferUpdateInRect(x,y,w,h);
-
 
         // Refresh with latest pointer (should be "read-locked" throughout here with CG but I don't see that option)
         if (cl->scalingFactor != 1)

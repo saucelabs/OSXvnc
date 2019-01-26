@@ -17,9 +17,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (readonly) CGFloat scaleFactor;
 
 - (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID scaleFactor:(CGFloat)scaleFactor;
-- (void)start;
+- (void)startWithFps:(int32_t)fps;
 - (nullable CMSampleBufferRef)lastFrame;
-- (nullable CMSampleBufferRef)frameWithTimeout:(NSTimeInterval)timeout;
+- (nullable CMSampleBufferRef)nextFrameWithTimeout:(NSTimeInterval)timeout;
 - (void)stop;
 
 @end
