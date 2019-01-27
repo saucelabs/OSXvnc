@@ -416,28 +416,10 @@ static void *clientOutput(void *data) {
                 pthread_cond_wait(&cl->updateCond, &cl->updateMutex);
         }
 
-        if (lastFrameUpdateTimestamp > 0) {
-          uint64_t timeElapsed = mach_absolute_time() - lastFrameUpdateTimestamp;
-          static dispatch_once_t onceTimebaseInfo;
-          dispatch_once(&onceTimebaseInfo, ^{
-            mach_timebase_info(&timebaseInfo);
-          });
-          uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
-          int64_t nextFrameDelta = rfbDeferUpdateTime * 1000 - nsElapsed / 1000; // microseconds
-          if (nextFrameDelta > 0) {
-            pthread_mutex_unlock(&cl->updateMutex);
-            usleep((useconds_t) nextFrameDelta);
-            pthread_mutex_lock(&cl->updateMutex);
-          }
-        }
-        lastFrameUpdateTimestamp = mach_absolute_time();
-
         cl->screenBuffer = rfbGetFramebuffer();
         size_t dataLength;
         char *frameData = rfbGetRecentFrameData(&dataLength);
-        if (nil == frameData) {
-          rfbLog("Cannot retrieve the frame data");
-        } else {
+        if (nil != frameData) {
           memcpy(cl->screenBuffer, frameData, dataLength);
           if (NULL != previousFramebuffer) {
             preprocessModifiedRegion(cl, frameData, dataLength);
@@ -468,7 +450,23 @@ static void *clientOutput(void *data) {
          CGDisplayMoveCursorToPoint(displayID, CGPointZero); */
 
         /* Now actually send the update. */
-        rfbSendFramebufferUpdate(cl, updateRegion);
+        if (rfbSendFramebufferUpdate(cl, updateRegion)) {
+          if (lastFrameUpdateTimestamp > 0) {
+            uint64_t timeElapsed = mach_absolute_time() - lastFrameUpdateTimestamp;
+            static dispatch_once_t onceTimebaseInfo;
+            dispatch_once(&onceTimebaseInfo, ^{
+              mach_timebase_info(&timebaseInfo);
+            });
+            uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
+            int64_t nextFrameDelta = rfbDeferUpdateTime * 1000 - nsElapsed / 1000; // microseconds
+            if (nextFrameDelta > 0) {
+              pthread_mutex_unlock(&cl->updateMutex);
+              usleep((useconds_t) nextFrameDelta);
+              pthread_mutex_lock(&cl->updateMutex);
+            }
+          }
+          lastFrameUpdateTimestamp = mach_absolute_time();
+        }
         /* If we were hiding it before make it reappear now
             displayErr = CGDisplayShowCursor(displayID);
         if (displayErr != 0)
