@@ -373,7 +373,7 @@ extern unsigned rfbProtocolMinorVersion;
 extern unsigned rfbPort;
 
 extern char *rfbGetFramebuffer(void);
-extern void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h);
+extern char *rfbGetRecentFrameData(size_t *dataLength);
 
 extern void rfbStartClientWithFD(int client_fd);
 extern void connectReverseClient(char *hostName, int portNum);

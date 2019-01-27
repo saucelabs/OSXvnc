@@ -23,6 +23,7 @@
 #include <Cocoa/Cocoa.h>
 #include <Carbon/Carbon.h>
 
+#include <mach/mach_time.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -328,7 +329,63 @@ void rfbCheckForScreenResolutionChange() {
     }
 }
 
-static const NSTimeInterval UI_REFRESH_INTERVAL = 0.1;
+static uint64_t lastFrameUpdateTimestamp = 0;
+static mach_timebase_info_data_t timebaseInfo;
+static size_t previousFramebufferLength = 0;
+static char* previousFramebuffer = NULL;
+
+static void preprocessModifiedRegion(rfbClientPtr cl, char* currentFramebuffer, size_t currentFramebufferLength) {
+  if (NULL == previousFramebuffer
+      || previousFramebufferLength != currentFramebufferLength
+      || currentFramebufferLength != rfbScreen.height * rfbScreen.width * BYTES_PER_PIXEL) {
+    return;
+  }
+
+  // Split the display bitmap into equal rectangles
+  // Compare the previous and the current frame bitmaps
+  // and put 1 into modified rectangle cells
+  // These modified rectangles will be then united to cl->modifiedRegion
+  static const size_t VERTICAL_RECTS = 20;
+  static const size_t HORIZONTAL_RECTS = 20;
+  char screenGrid[VERTICAL_RECTS][HORIZONTAL_RECTS];
+  memset(screenGrid, 0, sizeof(screenGrid));
+
+  int y = 0;
+  int x = 0;
+  const size_t HORIZONTAL_STEP = rfbScreen.width / HORIZONTAL_RECTS;
+  const size_t VERTICAL_STEP = rfbScreen.height / VERTICAL_RECTS;
+  const size_t bytesPerRow = rfbScreen.width * BYTES_PER_PIXEL;
+  while (y < rfbScreen.height) {
+    while (x < rfbScreen.width) {
+      int gridX = x / HORIZONTAL_STEP;
+      int gridY = y / VERTICAL_STEP;
+      if (gridX >= HORIZONTAL_RECTS
+          || gridY >= VERTICAL_RECTS
+          || screenGrid[gridY][gridX] > 0) {
+        x += HORIZONTAL_STEP;
+        continue;
+      }
+
+      size_t framebufferOffset = y * bytesPerRow + x * BYTES_PER_PIXEL;
+      BOOL isRectModified = 0 != memcmp(currentFramebuffer + framebufferOffset, previousFramebuffer + framebufferOffset, HORIZONTAL_STEP * BYTES_PER_PIXEL);
+
+      if (isRectModified) {
+        RegionRec tmpRegion;
+        BoxRec box;
+        box.x1 = x;
+        box.y1 = y;
+        box.x2 = box.x1 + HORIZONTAL_STEP;
+        box.y2 = box.y1 + VERTICAL_STEP;
+        SAFE_REGION_INIT(&hackScreen, &tmpRegion, &box, 0);
+        REGION_UNION(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &tmpRegion);
+        REGION_UNINIT(&hackScreen, &tmpRegion);
+        screenGrid[gridY][gridX] = 1;
+      }
+      x += HORIZONTAL_STEP;
+    }
+    y += VERTICAL_STEP;
+  }
+}
 
 static void *clientOutput(void *data) {
     rfbClientPtr cl = (rfbClientPtr)data;
@@ -359,20 +416,44 @@ static void *clientOutput(void *data) {
                 pthread_cond_wait(&cl->updateCond, &cl->updateMutex);
         }
 
+        if (lastFrameUpdateTimestamp > 0) {
+          uint64_t timeElapsed = mach_absolute_time() - lastFrameUpdateTimestamp;
+          static dispatch_once_t onceTimebaseInfo;
+          dispatch_once(&onceTimebaseInfo, ^{
+            mach_timebase_info(&timebaseInfo);
+          });
+          uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
+          int64_t nextFrameDelta = rfbDeferUpdateTime * 1000 - nsElapsed / 1000; // microseconds
+          if (nextFrameDelta > 0) {
+            pthread_mutex_unlock(&cl->updateMutex);
+            usleep((useconds_t) nextFrameDelta);
+            pthread_mutex_lock(&cl->updateMutex);
+          }
+        }
+        lastFrameUpdateTimestamp = mach_absolute_time();
+
+        cl->screenBuffer = rfbGetFramebuffer();
+        size_t dataLength;
+        char *frameData = rfbGetRecentFrameData(&dataLength);
+        if (nil == frameData) {
+          rfbLog("Cannot retrieve the frame data");
+        } else {
+          memcpy(cl->screenBuffer, frameData, dataLength);
+          if (NULL != previousFramebuffer) {
+            preprocessModifiedRegion(cl, frameData, dataLength);
+            free(previousFramebuffer);
+          }
+          previousFramebuffer = frameData;
+          previousFramebufferLength = dataLength;
+        }
+
         /* Now, get the region we're going to update, and remove
             it from cl->modifiedRegion _before_ we send the update.
             That way, if anything that overlaps the region we're sending
             is updated, we'll be sure to do another update later. */
         REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
         REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
-        __block RegionRec processedRegion;
-        REGION_INIT(&hackScreen, &processedRegion, NullBox, 0);
-        REGION_COPY(&hackScreen, &processedRegion, &updateRegion);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(UI_REFRESH_INTERVAL * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-          REGION_SUBTRACT(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &processedRegion);
-          REGION_UNINIT(&hackScreen, &processedRegion);
-        });
-//        REGION_SUBTRACT(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &updateRegion);
+        REGION_SUBTRACT(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &updateRegion);
         /* REDSTONE - We also want to clear out the requested region, so we don't process
             graphic updates in previously requested regions */
         REGION_UNINIT(&hackScreen, &cl->requestedRegion);
@@ -384,19 +465,9 @@ static void *clientOutput(void *data) {
          displayErr = CGDisplayHideCursor(displayID);
          if (displayErr != 0)
          rfbLog("Error Hiding Cursor %d", displayErr);
-         CGDisplayMoveCursorToPoint(displayID, CGPointZero);
-                                            */
+         CGDisplayMoveCursorToPoint(displayID, CGPointZero); */
 
         /* Now actually send the update. */
-//        RegionRec screenRegion;
-//        BoxRec screenRect;
-//        screenRect.x1 = 0;
-//        screenRect.x2 = rfbScreen.width;
-//        screenRect.y1 = 0;
-//        screenRect.y2 = rfbScreen.height;
-//        screenRegion.extents = screenRect;
-//        screenRegion.data = NULL;
-//        rfbSendFramebufferUpdate(cl, screenRegion);
         rfbSendFramebufferUpdate(cl, updateRegion);
         /* If we were hiding it before make it reappear now
             displayErr = CGDisplayShowCursor(displayID);
@@ -564,7 +635,6 @@ void connectReverseClient(char *hostName, int portNum) {
     }
 }
 
-static const size_t BYTES_PER_PIXEL = 4;
 static char *frameBufferData = NULL;
 
 // this method can be used for debug purposes
@@ -606,8 +676,7 @@ BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, NSString *p
     return YES;
 }
 
-char *getRecentFrameData(size_t *dataLength) {
-//    CMSampleBufferRef sampleBuffer = [vncScreenCapture nextFrameWithTimeout:UI_REFRESH_INTERVAL];
+char *rfbGetRecentFrameData(size_t *dataLength) {
     CMSampleBufferRef sampleBuffer = vncScreenCapture.lastFrame;
     if (nil == sampleBuffer) {
         rfbLog("There was an error getting the screen shot");
@@ -632,7 +701,7 @@ char *rfbGetFramebuffer(void) {
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
         if (NULL == frameBufferData) {
             size_t length;
-            char *frameData = getRecentFrameData(&length);
+            char *frameData = rfbGetRecentFrameData(&length);
             if (nil != frameData) {
                 frameBufferData = frameData;
             }
@@ -657,20 +726,6 @@ char *rfbGetFramebuffer(void) {
     }
 
     return returnValue;
-}
-
-// Called to get record updates of the requested region into our framebuffer
-// With AVScreenCapture framework there is no point in cutting of screen areas,
-// since the provider anyway returns the whole screen
-void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h) {
-    size_t dataLength;
-    char *frameData = getRecentFrameData(&dataLength);
-    if (nil == frameData) {
-        rfbLog("Cannot retrieve the frame data");
-        return;
-    }
-    memcpy(frameBufferData, frameData, dataLength);
-    free(frameData);
 }
 
 static bool rfbScreenInit(void) {

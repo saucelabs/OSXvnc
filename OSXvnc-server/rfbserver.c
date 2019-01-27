@@ -1092,10 +1092,6 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl, RegionRec updateRegion) {
         }
     }
 
-    cl->screenBuffer = rfbGetFramebuffer();
-
-    rfbGetFramebufferUpdateInRect(x, y, w, h);
-
     for (i = 0; i < REGION_NUM_RECTS(&updateRegion); i++) {
         uint32_t x = REGION_RECTS(&updateRegion)[i].x1;
         uint32_t y = REGION_RECTS(&updateRegion)[i].y1;

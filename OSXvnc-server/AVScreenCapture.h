@@ -11,6 +11,10 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+extern const int32_t MIN_FPS;
+extern const int32_t MAX_FPS;
+extern const size_t BYTES_PER_PIXEL;
+
 @interface AVScreenCapture : NSObject
 
 @property (readonly) CGDirectDisplayID displayID;

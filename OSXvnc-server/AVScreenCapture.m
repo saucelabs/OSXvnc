@@ -11,8 +11,9 @@
 #import <AppKit/AppKit.h>
 #import "AVSampleBufferHolder.h"
 
-static const int32_t MIN_FPS = 15;
-static const int32_t MAX_FPS = 60;
+const int32_t MIN_FPS = 15;
+const int32_t MAX_FPS = 60;
+const size_t BYTES_PER_PIXEL = 4;
 
 @interface AVScreenCapture() <AVCaptureVideoDataOutputSampleBufferDelegate>
 
