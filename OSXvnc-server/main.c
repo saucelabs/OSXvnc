@@ -329,67 +329,25 @@ void rfbCheckForScreenResolutionChange() {
     }
 }
 
-static uint64_t lastFrameUpdateTimestamp = 0;
+static uint64_t previousFramebufferTimestamp = 0;
+static uint64_t previousFramebufferDeliveryTimestamp = 0;
+static uint64_t previousReferenceFramebufferTimestamp = 0;
 static mach_timebase_info_data_t timebaseInfo;
-static size_t previousFramebufferLength = 0;
-static char* previousFramebuffer = NULL;
-
-static void preprocessModifiedRegion(rfbClientPtr cl, char* currentFramebuffer, size_t currentFramebufferLength) {
-  if (NULL == previousFramebuffer
-      || previousFramebufferLength != currentFramebufferLength
-      || currentFramebufferLength != rfbScreen.height * rfbScreen.width * BYTES_PER_PIXEL) {
-    return;
-  }
-
-  // Split the display bitmap into equal rectangles
-  // Compare the previous and the current frame bitmaps
-  // and put 1 into modified rectangle cells
-  // These modified rectangles will be then united to cl->modifiedRegion
-  static const size_t VERTICAL_RECTS = 20;
-  static const size_t HORIZONTAL_RECTS = 20;
-  char screenGrid[VERTICAL_RECTS][HORIZONTAL_RECTS];
-  memset(screenGrid, 0, sizeof(screenGrid));
-
-  int y = 0;
-  int x = 0;
-  const size_t HORIZONTAL_STEP = rfbScreen.width / HORIZONTAL_RECTS;
-  const size_t VERTICAL_STEP = rfbScreen.height / VERTICAL_RECTS;
-  const size_t bytesPerRow = rfbScreen.width * BYTES_PER_PIXEL;
-  while (y < rfbScreen.height) {
-    x = 0;
-    while (x < rfbScreen.width) {
-      int gridX = x / HORIZONTAL_STEP;
-      int gridY = y / VERTICAL_STEP;
-      if (gridX >= HORIZONTAL_RECTS
-          || gridY >= VERTICAL_RECTS
-          || screenGrid[gridY][gridX] > 0) {
-        x += HORIZONTAL_STEP;
-        continue;
-      }
-
-      size_t framebufferOffset = y * bytesPerRow + x * BYTES_PER_PIXEL;
-      if (0 != memcmp(currentFramebuffer + framebufferOffset, previousFramebuffer + framebufferOffset, HORIZONTAL_STEP * BYTES_PER_PIXEL)) {
-        RegionRec tmpRegion;
-        BoxRec box;
-        box.x1 = x;
-        box.y1 = y;
-        box.x2 = box.x1 + HORIZONTAL_STEP;
-        box.y2 = box.y1 + VERTICAL_STEP;
-        SAFE_REGION_INIT(&hackScreen, &tmpRegion, &box, 0);
-        REGION_UNION(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &tmpRegion);
-        REGION_UNINIT(&hackScreen, &tmpRegion);
-        screenGrid[gridY][gridX] = 1;
-      }
-      x += HORIZONTAL_STEP;
-    }
-    y += VERTICAL_STEP;
-  }
-}
+// This value is quite important, since there is a delay
+// between the current motion events state and the actual captured frame.
+// That is why we must delay region update until the next reference frame
+// comes.
+static const NSTimeInterval referenceFrameInterval = 0.5;
 
 static void *clientOutput(void *data) {
     rfbClientPtr cl = (rfbClientPtr)data;
     RegionRec updateRegion;
     Bool haveUpdate = false;
+
+    static dispatch_once_t onceTimebaseInfo;
+    dispatch_once(&onceTimebaseInfo, ^{
+      mach_timebase_info(&timebaseInfo);
+    });
 
     while (1) {
         haveUpdate = false;
@@ -407,7 +365,6 @@ static void *clientOutput(void *data) {
 
             // Only do checks if we HAVE an outstanding request
             if (REGION_NOTEMPTY(&hackScreen, &cl->requestedRegion)) {
-                NSLog(@"has update");
                 haveUpdate = TRUE;
             }
 
@@ -417,62 +374,71 @@ static void *clientOutput(void *data) {
 
         cl->screenBuffer = rfbGetFramebuffer();
         size_t dataLength;
-        char *frameData = rfbGetRecentFrameData(&dataLength);
+        uint64_t timestamp;
+        BOOL isReferenceFrame = NO;
+        char *frameData = rfbGetRecentFrameData(&dataLength, &timestamp);
         if (nil != frameData) {
-          memcpy(cl->screenBuffer, frameData, dataLength);
-          if (NULL != previousFramebuffer) {
-            preprocessModifiedRegion(cl, frameData, dataLength);
-            free(previousFramebuffer);
-          }
-          previousFramebuffer = frameData;
-          previousFramebufferLength = dataLength;
-        }
-
-        /* Now, get the region we're going to update, and remove
-            it from cl->modifiedRegion _before_ we send the update.
-            That way, if anything that overlaps the region we're sending
-            is updated, we'll be sure to do another update later. */
-        REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
-        REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
-        REGION_SUBTRACT(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &updateRegion);
-        /* REDSTONE - We also want to clear out the requested region, so we don't process
-            graphic updates in previously requested regions */
-        REGION_UNINIT(&hackScreen, &cl->requestedRegion);
-        REGION_INIT(&hackScreen, &cl->requestedRegion, NullBox, 0);
-
-        /*  This does happen but it's asynchronous (and slow to occur)
-            what we really want to happen is to just temporarily hide the cursor (while sending to the remote screen)
-            -- It's not even usually there (as it's handled by the display driver - but under certain occasions it does appear
-         displayErr = CGDisplayHideCursor(displayID);
-         if (displayErr != 0)
-         rfbLog("Error Hiding Cursor %d", displayErr);
-         CGDisplayMoveCursorToPoint(displayID, CGPointZero); */
-
-        /* Now actually send the update. */
-        if (rfbSendFramebufferUpdate(cl, updateRegion)) {
-          if (lastFrameUpdateTimestamp > 0) {
-            uint64_t timeElapsed = mach_absolute_time() - lastFrameUpdateTimestamp;
-            static dispatch_once_t onceTimebaseInfo;
-            dispatch_once(&onceTimebaseInfo, ^{
-              mach_timebase_info(&timebaseInfo);
-            });
-            uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
-            int64_t nextFrameDelta = rfbDeferUpdateTime * 1000 - nsElapsed / 1000; // microseconds
-            if (nextFrameDelta > 0) {
-              pthread_mutex_unlock(&cl->updateMutex);
-              usleep((useconds_t) nextFrameDelta);
-              pthread_mutex_lock(&cl->updateMutex);
+            if (timestamp == previousFramebufferTimestamp
+                && previousFramebufferDeliveryTimestamp > 0) {
+                // Perform throttling to save the bandwidth
+                uint64_t timeElapsed = mach_absolute_time() - previousFramebufferDeliveryTimestamp;
+                uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
+                int64_t microsecRemainingTillNextFrame = rfbDeferUpdateTime * 1000 - nsElapsed / 1000;
+                if (microsecRemainingTillNextFrame > 0) {
+                  pthread_mutex_unlock(&cl->updateMutex);
+                  usleep((useconds_t)microsecRemainingTillNextFrame);
+                  pthread_mutex_lock(&cl->updateMutex);
+                }
             }
-          }
-          lastFrameUpdateTimestamp = mach_absolute_time();
-        }
-        /* If we were hiding it before make it reappear now
-            displayErr = CGDisplayShowCursor(displayID);
-        if (displayErr != 0)
-            rfbLog("Error Showing Cursor %d", displayErr);
-        */
 
-        REGION_UNINIT(&hackScreen, &updateRegion);
+            isReferenceFrame = previousReferenceFramebufferTimestamp == 0;
+            if (previousReferenceFramebufferTimestamp > 0) {
+              uint64_t timeElapsed = mach_absolute_time() - previousReferenceFramebufferTimestamp;
+              uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
+              isReferenceFrame = nsElapsed / 1e9 >= referenceFrameInterval;
+            }
+            memcpy(cl->screenBuffer, frameData, dataLength);
+            free(frameData);
+            frameData = nil;
+            if (isReferenceFrame) {
+              previousReferenceFramebufferTimestamp = timestamp;
+            }
+            previousFramebufferTimestamp = timestamp;
+
+            /* Now, get the region we're going to update, and remove
+                it from cl->modifiedRegion _before_ we send the update.
+                That way, if anything that overlaps the region we're sending
+                is updated, we'll be sure to do another update later. */
+            REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
+            REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
+            if (isReferenceFrame) {
+              REGION_SUBTRACT(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &updateRegion);
+            }
+            /* REDSTONE - We also want to clear out the requested region, so we don't process
+                graphic updates in previously requested regions */
+            REGION_UNINIT(&hackScreen, &cl->requestedRegion);
+            REGION_INIT(&hackScreen, &cl->requestedRegion, NullBox, 0);
+
+            /*  This does happen but it's asynchronous (and slow to occur)
+                what we really want to happen is to just temporarily hide the cursor (while sending to the remote screen)
+                -- It's not even usually there (as it's handled by the display driver - but under certain occasions it does appear
+             displayErr = CGDisplayHideCursor(displayID);
+             if (displayErr != 0)
+             rfbLog("Error Hiding Cursor %d", displayErr);
+             CGDisplayMoveCursorToPoint(displayID, CGPointZero); */
+
+            /* Now actually send the update. */
+            if (rfbSendFramebufferUpdate(cl, updateRegion)) {
+              previousFramebufferDeliveryTimestamp = mach_absolute_time();
+            }
+            /* If we were hiding it before make it reappear now
+                displayErr = CGDisplayShowCursor(displayID);
+            if (displayErr != 0)
+                rfbLog("Error Showing Cursor %d", displayErr);
+            */
+
+            REGION_UNINIT(&hackScreen, &updateRegion);
+        }
         pthread_mutex_unlock(&cl->updateMutex);
     }
 
@@ -673,32 +639,49 @@ BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, NSString *p
     return YES;
 }
 
-char *rfbGetRecentFrameData(size_t *dataLength) {
-    CMSampleBufferRef sampleBuffer = vncScreenCapture.lastFrame;
-    if (nil == sampleBuffer) {
+char *extractFrameData(CMSampleBufferRef frameBuffer, size_t *dataLength) {
+  CVImageBufferRef screenBuffer = CMSampleBufferGetImageBuffer(frameBuffer);
+  CVPixelBufferLockBaseAddress(screenBuffer, 0);
+  char *baseAddress = CVPixelBufferGetBaseAddress(screenBuffer);
+  const size_t screenWidth = CVPixelBufferGetWidth(screenBuffer);
+  const size_t screenHeight = CVPixelBufferGetHeight(screenBuffer);
+  const size_t pixelsLength = BYTES_PER_PIXEL * screenWidth * screenHeight;
+  char *pixels = malloc(pixelsLength);
+  memcpy(pixels, baseAddress, pixelsLength);
+  CVPixelBufferUnlockBaseAddress(screenBuffer, 0);
+  CFRelease(frameBuffer);
+  *dataLength = pixelsLength;
+  return pixels;
+}
+
+char *rfbGetNextFrameData(size_t *dataLength, uint64_t *timestamp, NSTimeInterval timeout) {
+  CMSampleBufferRef sampleBuffer;
+  uint64_t stamp;
+  if (![vncScreenCapture retrieveNextFrame:&sampleBuffer timestamp:&stamp timeout:timeout]) {
+    rfbLog("There was an error getting the screen shot");
+    return nil;
+  }
+  *timestamp = stamp;
+  return extractFrameData(sampleBuffer, dataLength);
+}
+
+char *rfbGetRecentFrameData(size_t *dataLength, uint64_t *timestamp) {
+    CMSampleBufferRef sampleBuffer;
+    uint64_t stamp;
+    if (![vncScreenCapture retrieveLastFrame:&sampleBuffer timestamp:&stamp]) {
         rfbLog("There was an error getting the screen shot");
         return nil;
     }
-    // The incoming buffer is always BGRA32-encoded
-    CVImageBufferRef screenBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-    CVPixelBufferLockBaseAddress(screenBuffer, 0);
-    char *baseAddress = CVPixelBufferGetBaseAddress(screenBuffer);
-    const size_t screenWidth = CVPixelBufferGetWidth(screenBuffer);
-    const size_t screenHeight = CVPixelBufferGetHeight(screenBuffer);
-    const size_t pixelsLength = BYTES_PER_PIXEL * screenWidth * screenHeight;
-    char *pixels = malloc(pixelsLength);
-    memcpy(pixels, baseAddress, pixelsLength);
-    CVPixelBufferUnlockBaseAddress(screenBuffer, 0);
-    CFRelease(sampleBuffer);
-    *dataLength = pixelsLength;
-    return pixels;
+    *timestamp = stamp;
+    return extractFrameData(sampleBuffer, dataLength);
 }
 
 char *rfbGetFramebuffer(void) {
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
         if (NULL == frameBufferData) {
             size_t length;
-            char *frameData = rfbGetRecentFrameData(&length);
+            uint64_t timestamp;
+            char *frameData = rfbGetRecentFrameData(&length, &timestamp);
             if (nil != frameData) {
                 frameBufferData = frameData;
             }
@@ -766,9 +749,9 @@ static bool rfbScreenInit(void) {
     rfbScreen.depth = samplesPerPixel * bitsPerSample;
     //Fix for Yosemite and above
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
-        // Let it collect a frame
-        CMSampleBufferRef sampleBuffer = [vncScreenCapture nextFrameWithTimeout:2.0];
-        if (nil != sampleBuffer) {
+        CMSampleBufferRef sampleBuffer;
+        uint64_t timestamp;
+        if ([vncScreenCapture retrieveNextFrame:&sampleBuffer timestamp:&timestamp timeout:2.0]) {
             CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
             CVPixelBufferLockBaseAddress(imageBuffer, 0);
             rfbScreen.paddedWidthInBytes = (int) CVPixelBufferGetBytesPerRow(imageBuffer);

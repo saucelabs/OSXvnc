@@ -9,6 +9,7 @@
 #import "AVScreenCapture.h"
 
 #import <AppKit/AppKit.h>
+#import <mach/mach_time.h>
 #import "AVSampleBufferHolder.h"
 
 const int32_t MIN_FPS = 15;
@@ -23,6 +24,7 @@ const size_t BYTES_PER_PIXEL = 4;
 @property (nonatomic, retain) AVSampleBufferHolder *sampleBufferHolder;
 @property (nonatomic) dispatch_queue_t sessionQueue;
 @property (nonatomic, nullable) dispatch_semaphore_t nextFrameSemaphore;
+@property (nonatomic) BOOL isWaitingForNextFrame;
 
 @end
 
@@ -41,6 +43,7 @@ const size_t BYTES_PER_PIXEL = 4;
     _displayID = displayID;
     _scaleFactor = scaleFactor;
     _nextFrameSemaphore = NULL;
+    _isWaitingForNextFrame = NO;
     _sampleBufferHolder = [[AVSampleBufferHolder alloc] init];
   }
   return self;
@@ -85,6 +88,8 @@ const size_t BYTES_PER_PIXEL = 4;
   self.sessionQueue = dispatch_queue_create("de.uni-mannheim.VineServer.avscreencapture", queueAttributes);
   [self.output setSampleBufferDelegate:self queue:self.sessionQueue];
 
+  self.nextFrameSemaphore = dispatch_semaphore_create(0);
+
   [self.session startRunning];
 }
 
@@ -108,49 +113,62 @@ const size_t BYTES_PER_PIXEL = 4;
     dispatch_release(self.nextFrameSemaphore);
     self.nextFrameSemaphore = NULL;
   }
-
 }
 
-- (CMSampleBufferRef)lastFrame
+- (BOOL)retrieveLastFrame:(CMSampleBufferRef *)frame timestamp:(uint64_t *)timestamp
 {
   if (nil == self.session) {
-    return nil;
+    return NO;
   }
 
   __block CMSampleBufferRef buffer = nil;
+  __block uint64_t stamp = 0;
   dispatch_sync(self.sessionQueue, ^{
     buffer = self.sampleBufferHolder.sampleBuffer;
+    stamp = self.sampleBufferHolder.timestamp;
     if (nil != buffer) {
       CFRetain(buffer);
     }
   });
-  return buffer;
+  if (nil == buffer) {
+    return NO;
+  }
+
+  *frame = buffer;
+  *timestamp = stamp;
+  return YES;
 }
 
-- (CMSampleBufferRef)nextFrameWithTimeout:(NSTimeInterval)timeout
+- (BOOL)retrieveNextFrame:(CMSampleBufferRef *)frame timestamp:(uint64_t *)timestamp timeout:(NSTimeInterval)timeout
 {
   if (nil == self.session) {
-    return nil;
+    return NO;
   }
 
-  self.nextFrameSemaphore = dispatch_semaphore_create(0);
+  @synchronized (self) {
+    self.isWaitingForNextFrame = YES;
+  }
   BOOL didFrameArrive = 0 == dispatch_semaphore_wait(self.nextFrameSemaphore,
                                                      dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC)));
-  dispatch_release(self.nextFrameSemaphore);
-  self.nextFrameSemaphore = NULL;
+  @synchronized (self) {
+    self.isWaitingForNextFrame = NO;
+  }
   if (!didFrameArrive) {
-    return nil;
+    return NO;
   }
 
-  return self.lastFrame;
+  return [self retrieveLastFrame:frame timestamp:timestamp];
 }
 
 - (void)captureOutput:(AVCaptureOutput *)output
 didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
        fromConnection:(AVCaptureConnection *)connection {
   self.sampleBufferHolder.sampleBuffer = sampleBuffer;
-  if (NULL != self.nextFrameSemaphore) {
-    dispatch_semaphore_signal(self.nextFrameSemaphore);
+  self.sampleBufferHolder.timestamp = mach_absolute_time();
+  @synchronized (self) {
+    if (self.isWaitingForNextFrame) {
+      dispatch_semaphore_signal(self.nextFrameSemaphore);
+    }
   }
 }
 

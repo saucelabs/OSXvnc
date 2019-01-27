@@ -11,6 +11,16 @@
 
 @implementation AVSampleBufferHolder
 
+@synthesize timestamp = _timestamp;
+
+- (instancetype)init
+{
+  if ((self = [super init])) {
+    _timestamp = 0;
+  }
+  return self;
+}
+
 - (void)dealloc {
   if (nil != _sampleBuffer) {
     CFRelease(_sampleBuffer);

@@ -22,8 +22,8 @@ extern const size_t BYTES_PER_PIXEL;
 
 - (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID scaleFactor:(CGFloat)scaleFactor;
 - (void)startWithFps:(int32_t)fps;
-- (nullable CMSampleBufferRef)lastFrame;
-- (nullable CMSampleBufferRef)nextFrameWithTimeout:(NSTimeInterval)timeout;
+- (BOOL)retrieveLastFrame:(CMSampleBufferRef *)frame timestamp:(uint64_t *)timestamp;
+- (BOOL)retrieveNextFrame:(CMSampleBufferRef *)frame timestamp:(uint64_t *)timestamp timeout:(NSTimeInterval)timeout;
 - (void)stop;
 
 @end

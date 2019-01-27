@@ -806,7 +806,6 @@ void rfbProcessClientNormalMessage(rfbClientPtr cl) {
             RegionRec tmpRegion;
             BoxRec box;
 
-            NSLog(@"Got update request");
             if ((n = ReadExact(cl, ((char *)&msg) + 1,
                                sz_rfbFramebufferUpdateRequestMsg-1)) <= 0) {
                 if (n != 0)
@@ -1000,7 +999,6 @@ void rfbProcessClientNormalMessage(rfbClientPtr cl) {
  */
 
 Bool rfbSendFramebufferUpdate(rfbClientPtr cl, RegionRec updateRegion) {
-    NSLog(@"Sending framebuffer");
     int i;
     uint32_t nUpdateRegionRects = 0;
     Bool sendRichCursorEncoding = FALSE;
