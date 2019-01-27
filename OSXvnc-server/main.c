@@ -356,6 +356,7 @@ static void preprocessModifiedRegion(rfbClientPtr cl, char* currentFramebuffer, 
   const size_t VERTICAL_STEP = rfbScreen.height / VERTICAL_RECTS;
   const size_t bytesPerRow = rfbScreen.width * BYTES_PER_PIXEL;
   while (y < rfbScreen.height) {
+    x = 0;
     while (x < rfbScreen.width) {
       int gridX = x / HORIZONTAL_STEP;
       int gridY = y / VERTICAL_STEP;
@@ -367,9 +368,7 @@ static void preprocessModifiedRegion(rfbClientPtr cl, char* currentFramebuffer, 
       }
 
       size_t framebufferOffset = y * bytesPerRow + x * BYTES_PER_PIXEL;
-      BOOL isRectModified = 0 != memcmp(currentFramebuffer + framebufferOffset, previousFramebuffer + framebufferOffset, HORIZONTAL_STEP * BYTES_PER_PIXEL);
-
-      if (isRectModified) {
+      if (0 != memcmp(currentFramebuffer + framebufferOffset, previousFramebuffer + framebufferOffset, HORIZONTAL_STEP * BYTES_PER_PIXEL)) {
         RegionRec tmpRegion;
         BoxRec box;
         box.x1 = x;
