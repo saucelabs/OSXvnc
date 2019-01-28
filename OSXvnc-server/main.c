@@ -329,23 +329,23 @@ void rfbCheckForScreenResolutionChange() {
     }
 }
 
-static uint64_t previousFramebufferTimestamp = 0;
-static uint64_t previousFramebufferDeliveryTimestamp = 0;
-static uint64_t previousReferenceFramebufferTimestamp = 0;
 static mach_timebase_info_data_t timebaseInfo;
 // This value is quite important, since there is a delay
 // between the current motion events state and the actual captured frame.
 // That is why we must delay region update until the next reference frame
 // comes.
-static const NSTimeInterval referenceFrameInterval = 0.5;
+static const NSTimeInterval REFERENCE_FRAME_INTERVAL = 0.5;
+// How many refernce frames it is neeeded to count before
+// the full screen is going to be refreshed
+static const int FULL_SCREEN_REFRESH_INTERVAL = 10;
 
 static void *clientOutput(void *data) {
     rfbClientPtr cl = (rfbClientPtr)data;
     RegionRec updateRegion;
     Bool haveUpdate = false;
 
-    static dispatch_once_t onceTimebaseInfo;
-    dispatch_once(&onceTimebaseInfo, ^{
+    static dispatch_once_t onceStreamingInit;
+    dispatch_once(&onceStreamingInit, ^{
       mach_timebase_info(&timebaseInfo);
     });
 
@@ -375,35 +375,49 @@ static void *clientOutput(void *data) {
         cl->screenBuffer = rfbGetFramebuffer();
         size_t dataLength;
         uint64_t timestamp;
-        BOOL isReferenceFrame = NO;
         char *frameData = rfbGetRecentFrameData(&dataLength, &timestamp);
         if (nil != frameData) {
-            if (timestamp == previousFramebufferTimestamp
-                && previousFramebufferDeliveryTimestamp > 0) {
-                // Perform throttling to save the bandwidth
-                uint64_t timeElapsed = mach_absolute_time() - previousFramebufferDeliveryTimestamp;
-                uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
-                int64_t microsecRemainingTillNextFrame = rfbDeferUpdateTime * 1000 - nsElapsed / 1000;
-                if (microsecRemainingTillNextFrame > 0) {
-                  pthread_mutex_unlock(&cl->updateMutex);
-                  usleep((useconds_t)microsecRemainingTillNextFrame);
-                  pthread_mutex_lock(&cl->updateMutex);
-                }
+          if (timestamp == cl->previousFramebufferTimestamp
+              && cl->previousFramebufferDeliveryTimestamp > 0) {
+            // Perform throttling to save the bandwidth
+            uint64_t timeElapsed = mach_absolute_time() - cl->previousFramebufferDeliveryTimestamp;
+            uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
+            int64_t microsecRemainingTillNextFrame = rfbDeferUpdateTime * 1000 - nsElapsed / 1000;
+            if (microsecRemainingTillNextFrame > 0) {
+              pthread_mutex_unlock(&cl->updateMutex);
+              usleep((useconds_t)microsecRemainingTillNextFrame);
+              pthread_mutex_lock(&cl->updateMutex);
+              free(frameData);
+              frameData = rfbGetRecentFrameData(&dataLength, &timestamp);
             }
+          }
+        }
 
-            isReferenceFrame = previousReferenceFramebufferTimestamp == 0;
-            if (previousReferenceFramebufferTimestamp > 0) {
-              uint64_t timeElapsed = mach_absolute_time() - previousReferenceFramebufferTimestamp;
+        BOOL isReferenceFrame = NO;
+        if (nil != frameData) {
+            isReferenceFrame = cl->previousReferenceFramebufferTimestamp == 0;
+            if (!isReferenceFrame || cl->previousReferenceFramebufferTimestamp > 0) {
+              uint64_t timeElapsed = mach_absolute_time() - cl->previousReferenceFramebufferTimestamp;
               uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
-              isReferenceFrame = nsElapsed / 1e9 >= referenceFrameInterval;
+              isReferenceFrame = nsElapsed / 1e9 >= REFERENCE_FRAME_INTERVAL;
             }
             memcpy(cl->screenBuffer, frameData, dataLength);
             free(frameData);
             frameData = nil;
             if (isReferenceFrame) {
-              previousReferenceFramebufferTimestamp = timestamp;
+              cl->previousReferenceFramebufferTimestamp = timestamp;
+              cl->referenceFramesCount++;
             }
-            previousFramebufferTimestamp = timestamp;
+            cl->previousFramebufferTimestamp = timestamp;
+
+            if (0 == cl->referenceFramesCount % FULL_SCREEN_REFRESH_INTERVAL) {
+              BoxRec box;
+              box.x1 = box.y1 = 0;
+              box.x2 = rfbScreen.width;
+              box.y2 = rfbScreen.height;
+              REGION_UNINIT(&hackScreen, &cl->modifiedRegion);
+              REGION_INIT(pScreen, &cl->modifiedRegion, &box, 0);
+            }
 
             /* Now, get the region we're going to update, and remove
                 it from cl->modifiedRegion _before_ we send the update.
@@ -429,8 +443,9 @@ static void *clientOutput(void *data) {
 
             /* Now actually send the update. */
             if (rfbSendFramebufferUpdate(cl, updateRegion)) {
-              previousFramebufferDeliveryTimestamp = mach_absolute_time();
+              cl->previousFramebufferDeliveryTimestamp = mach_absolute_time();
             }
+
             /* If we were hiding it before make it reappear now
                 displayErr = CGDisplayShowCursor(displayID);
             if (displayErr != 0)
@@ -656,23 +671,19 @@ char *extractFrameData(CMSampleBufferRef frameBuffer, size_t *dataLength) {
 
 char *rfbGetNextFrameData(size_t *dataLength, uint64_t *timestamp, NSTimeInterval timeout) {
   CMSampleBufferRef sampleBuffer;
-  uint64_t stamp;
-  if (![vncScreenCapture retrieveNextFrame:&sampleBuffer timestamp:&stamp timeout:timeout]) {
+  if (![vncScreenCapture retrieveNextFrame:&sampleBuffer timestamp:timestamp timeout:timeout]) {
     rfbLog("There was an error getting the screen shot");
     return nil;
   }
-  *timestamp = stamp;
   return extractFrameData(sampleBuffer, dataLength);
 }
 
 char *rfbGetRecentFrameData(size_t *dataLength, uint64_t *timestamp) {
     CMSampleBufferRef sampleBuffer;
-    uint64_t stamp;
-    if (![vncScreenCapture retrieveLastFrame:&sampleBuffer timestamp:&stamp]) {
+    if (![vncScreenCapture retrieveLastFrame:&sampleBuffer timestamp:timestamp]) {
         rfbLog("There was an error getting the screen shot");
         return nil;
     }
-    *timestamp = stamp;
     return extractFrameData(sampleBuffer, dataLength);
 }
 

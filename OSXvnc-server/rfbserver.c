@@ -273,6 +273,11 @@ rfbClientPtr rfbNewClient(int sock) {
     for (i = 0; i < 256; i++)
         cl->modiferKeys[i] = 0;
 
+    cl->previousFramebufferTimestamp = 0;
+    cl->previousFramebufferDeliveryTimestamp = 0;
+    cl->previousReferenceFramebufferTimestamp = 0;
+    cl->referenceFramesCount = 0;
+
     box.x1 = box.y1 = 0;
     box.x2 = rfbScreen.width;
     box.y2 = rfbScreen.height;
