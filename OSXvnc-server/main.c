@@ -330,27 +330,44 @@ void rfbCheckForScreenResolutionChange() {
 }
 
 static mach_timebase_info_data_t timebaseInfo;
+static NSTimeInterval timebaseSeconds;
 // This value is quite important, since there is a delay
 // between the current motion events state and the actual captured frame.
 // That is why we must delay region update until the next reference frame
-// comes.
-static const NSTimeInterval REFERENCE_FRAME_INTERVAL = 0.5;
-// How many refernce frames it is neeeded to count before
-// the full screen is going to be refreshed
-static const int FULL_SCREEN_REFRESH_INTERVAL = 10;
+// comes
+static const NSTimeInterval REFERENCE_FRAME_INTERVAL = 0.4;
+// Force full screen update each X seconds to make sure there are
+// no synchronization artifacts on the remote screen
+static const NSTimeInterval FULL_SCREEN_REFRESH_INTERVAL = 2.0;
+
+static Bool rfbShouldRefreshFullScreen(rfbClientPtr cl) {
+  if (cl->previousFullScreenSyncTimestamp == cl->previousFramebufferDeliveryTimestamp) {
+    return FALSE;
+  }
+  NSTimeInterval timeElapsedSincePreviousSync = timebaseSeconds * (mach_absolute_time() - cl->previousFullScreenSyncTimestamp);
+  return timeElapsedSincePreviousSync >= FULL_SCREEN_REFRESH_INTERVAL;
+}
+
+static Bool rfbIsReferenceFrame(rfbClientPtr cl) {
+  NSTimeInterval timeElapsed = timebaseSeconds * (mach_absolute_time() - cl->previousReferenceFramebufferTimestamp);
+  return timeElapsed >= REFERENCE_FRAME_INTERVAL;
+}
 
 static void *clientOutput(void *data) {
     rfbClientPtr cl = (rfbClientPtr)data;
     RegionRec updateRegion;
-    Bool haveUpdate = false;
+    Bool haveUpdate = FALSE;
+    Bool shouldPerformFullscreenSync = FALSE;
 
     static dispatch_once_t onceStreamingInit;
     dispatch_once(&onceStreamingInit, ^{
       mach_timebase_info(&timebaseInfo);
+      timebaseSeconds = 1e-9 * (NSTimeInterval) timebaseInfo.numer / (NSTimeInterval) timebaseInfo.denom;
     });
 
     while (1) {
-        haveUpdate = false;
+        haveUpdate = FALSE;
+        shouldPerformFullscreenSync = FALSE;
 
         pthread_mutex_lock(&cl->updateMutex);
         while (!haveUpdate) {
@@ -365,7 +382,33 @@ static void *clientOutput(void *data) {
 
             // Only do checks if we HAVE an outstanding request
             if (REGION_NOTEMPTY(&hackScreen, &cl->requestedRegion)) {
+              if (rfbDeferUpdateTime > 0 && !cl->immediateUpdate) {
+                if (rfbShouldRefreshFullScreen(cl)) {
+                  shouldPerformFullscreenSync = TRUE;
+                  haveUpdate = TRUE;
+                } else {
+                  // Compare Request with Update Area
+                  REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
+                  REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
+                  haveUpdate = REGION_NOTEMPTY(&hackScreen, &updateRegion);
+                  REGION_UNINIT(&hackScreen, &updateRegion);
+                }
+
+                if (!haveUpdate) {
+                  if (rfbShouldSendNewCursor(cl))
+                    haveUpdate = TRUE;
+                  else if (rfbShouldSendNewPosition(cl))
+                    // Could Compare with the request area but for now just always send it
+                    haveUpdate = TRUE;
+                  else if (cl->needNewScreenSize)
+                    haveUpdate = TRUE;
+                }
+              } else {
+                /*  If we've turned off deferred updating
+                 We are going to send an update as soon as we have a requested,
+                 regardless of if we have a "change" intersection */
                 haveUpdate = TRUE;
+              }
             }
 
             if (!haveUpdate)
@@ -378,7 +421,9 @@ static void *clientOutput(void *data) {
         char *frameData = rfbGetRecentFrameData(&dataLength, &timestamp);
         if (nil != frameData) {
           if (timestamp == cl->previousFramebufferTimestamp
-              && cl->previousFramebufferDeliveryTimestamp > 0) {
+              && cl->previousFramebufferDeliveryTimestamp > 0
+              && !cl->immediateUpdate
+              && !shouldPerformFullscreenSync) {
             // Perform throttling to save the bandwidth
             uint64_t timeElapsed = mach_absolute_time() - cl->previousFramebufferDeliveryTimestamp;
             uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
@@ -393,24 +438,18 @@ static void *clientOutput(void *data) {
           }
         }
 
-        BOOL isReferenceFrame = NO;
+        Bool isReferenceFrame = FALSE;
         if (nil != frameData) {
-            isReferenceFrame = cl->previousReferenceFramebufferTimestamp == 0;
-            if (!isReferenceFrame || cl->previousReferenceFramebufferTimestamp > 0) {
-              uint64_t timeElapsed = mach_absolute_time() - cl->previousReferenceFramebufferTimestamp;
-              uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
-              isReferenceFrame = nsElapsed / 1e9 >= REFERENCE_FRAME_INTERVAL;
-            }
+            isReferenceFrame = shouldPerformFullscreenSync || rfbIsReferenceFrame(cl);
             memcpy(cl->screenBuffer, frameData, dataLength);
             free(frameData);
             frameData = nil;
             if (isReferenceFrame) {
               cl->previousReferenceFramebufferTimestamp = timestamp;
-              cl->referenceFramesCount++;
             }
             cl->previousFramebufferTimestamp = timestamp;
 
-            if (0 == cl->referenceFramesCount % FULL_SCREEN_REFRESH_INTERVAL) {
+            if (shouldPerformFullscreenSync) {
               BoxRec box;
               box.x1 = box.y1 = 0;
               box.x2 = rfbScreen.width;
@@ -444,6 +483,9 @@ static void *clientOutput(void *data) {
             /* Now actually send the update. */
             if (rfbSendFramebufferUpdate(cl, updateRegion)) {
               cl->previousFramebufferDeliveryTimestamp = mach_absolute_time();
+              if (shouldPerformFullscreenSync) {
+                cl->previousFullScreenSyncTimestamp = cl->previousFramebufferDeliveryTimestamp;
+              }
             }
 
             /* If we were hiding it before make it reappear now

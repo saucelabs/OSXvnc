@@ -276,7 +276,7 @@ rfbClientPtr rfbNewClient(int sock) {
     cl->previousFramebufferTimestamp = 0;
     cl->previousFramebufferDeliveryTimestamp = 0;
     cl->previousReferenceFramebufferTimestamp = 0;
-    cl->referenceFramesCount = 0;
+    cl->previousFullScreenSyncTimestamp = 0;
 
     box.x1 = box.y1 = 0;
     box.x2 = rfbScreen.width;
