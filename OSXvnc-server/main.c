@@ -288,8 +288,7 @@ void rfbCheckForScreenResolutionChange() {
 
                     rfbSendScreenUpdateEncoding(cl);
 
-                    size_t framebufferLength;
-                    cl->screenBuffer = rfbGetFramebuffer(&framebufferLength);
+                    cl->screenBuffer = rfbGetFramebuffer(nil);
                     if (cl->scalingFactor == 1) {
                         cl->scalingFrameBuffer = cl->screenBuffer;
                         cl->scalingPaddedWidthInBytes = rfbScreen.paddedWidthInBytes;
@@ -706,18 +705,23 @@ BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, NSString *p
     return YES;
 }
 
-char *extractFrameData(CMSampleBufferRef frameBuffer, size_t *dataLength) {
+char *extractFrameData(CMSampleBufferRef frameBuffer, size_t *dataLength, size_t *paddedWidth) {
     CVImageBufferRef screenBuffer = CMSampleBufferGetImageBuffer(frameBuffer);
     CVPixelBufferLockBaseAddress(screenBuffer, 0);
     char *baseAddress = CVPixelBufferGetBaseAddress(screenBuffer);
     const size_t screenWidth = CVPixelBufferGetWidth(screenBuffer);
     const size_t screenHeight = CVPixelBufferGetHeight(screenBuffer);
     const size_t pixelsLength = BYTES_PER_PIXEL * screenWidth * screenHeight;
+    if (paddedWidth) {
+        *paddedWidth = CVPixelBufferGetBytesPerRow(screenBuffer);
+    }
     char *pixels = malloc(pixelsLength);
     memcpy(pixels, baseAddress, pixelsLength);
     CVPixelBufferUnlockBaseAddress(screenBuffer, 0);
     CFRelease(frameBuffer);
-    *dataLength = pixelsLength;
+    if (dataLength) {
+        *dataLength = pixelsLength;
+    }
     return pixels;
 }
 
@@ -727,7 +731,7 @@ char *rfbGetNextFrameData(size_t *dataLength, uint64_t *timestamp, NSTimeInterva
         rfbLog("There was an error getting the screen shot");
         return nil;
     }
-    return extractFrameData(sampleBuffer, dataLength);
+    return extractFrameData(sampleBuffer, dataLength, nil);
 }
 
 char *rfbGetRecentFrameData(size_t *dataLength, uint64_t *timestamp) {
@@ -736,18 +740,20 @@ char *rfbGetRecentFrameData(size_t *dataLength, uint64_t *timestamp) {
         rfbLog("There was an error getting the screen shot");
         return nil;
     }
-    return extractFrameData(sampleBuffer, dataLength);
+    return extractFrameData(sampleBuffer, dataLength, nil);
 }
 
 char *rfbGetFramebuffer(size_t *bufferLength) {
     if (nil == frameBufferData) {
         uint64_t timestamp;
-        char *frameData = rfbGetRecentFrameData(&frameBufferLength, &timestamp);
+        char *frameData = rfbGetNextFrameData(&frameBufferLength, &timestamp, 2.0);
         if (nil != frameData) {
             frameBufferData = frameData;
         }
     }
-    *bufferLength = frameBufferLength;
+    if (bufferLength) {
+        *bufferLength = frameBufferLength;
+    }
     return frameBufferData;
 }
 
@@ -794,13 +800,10 @@ static bool rfbScreenInit(void) {
     //Fix for Yosemite and above
     if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
         CMSampleBufferRef sampleBuffer;
-        uint64_t timestamp;
-        if ([vncScreenCapture retrieveNextFrame:&sampleBuffer timestamp:&timestamp timeout:2.0]) {
-            CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-            CVPixelBufferLockBaseAddress(imageBuffer, 0);
-            rfbScreen.paddedWidthInBytes = (int) CVPixelBufferGetBytesPerRow(imageBuffer);
-            CVPixelBufferUnlockBaseAddress(imageBuffer, 0);
-            CFRelease(sampleBuffer);
+        if ([vncScreenCapture retrieveNextFrame:&sampleBuffer timestamp:nil timeout:2.0]) {
+            size_t paddedWidth;
+            extractFrameData(sampleBuffer, nil, &paddedWidth);
+            rfbScreen.paddedWidthInBytes = (int) paddedWidth;
         }
     } else {
         rfbScreen.paddedWidthInBytes = (int) CGDisplayBytesPerRow(displayID);

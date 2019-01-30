@@ -134,8 +134,12 @@ const size_t BYTES_PER_PIXEL = 4;
         return NO;
     }
 
-    *frame = buffer;
-    *timestamp = stamp;
+    if (frame) {
+        *frame = buffer;
+    }
+    if (timestamp) {
+        *timestamp = stamp;
+    }
     return YES;
 }
 
