@@ -316,7 +316,8 @@ rfbClientPtr rfbNewClient(int sock) {
 
     /* SERVER SCALING EXTENSIONS -- Server Scaling is off by default */
     cl->scalingFactor = 1;
-    cl->screenBuffer = rfbGetFramebuffer();
+    size_t bufferLength;
+    cl->screenBuffer = rfbGetFramebuffer(&bufferLength);
     cl->scalingFrameBuffer = cl->screenBuffer;
     cl->scalingPaddedWidthInBytes = rfbScreen.paddedWidthInBytes;
 

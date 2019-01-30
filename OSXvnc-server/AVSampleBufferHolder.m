@@ -15,30 +15,30 @@
 
 - (instancetype)init
 {
-  if ((self = [super init])) {
-    _timestamp = 0;
-  }
-  return self;
+    if ((self = [super init])) {
+        _timestamp = 0;
+    }
+    return self;
 }
 
 - (void)dealloc {
-  if (nil != _sampleBuffer) {
-    CFRelease(_sampleBuffer);
-  }
+    if (nil != _sampleBuffer) {
+        CFRelease(_sampleBuffer);
+    }
 
-  [super dealloc];
+    [super dealloc];
 }
 
 - (void)setSampleBuffer:(CMSampleBufferRef)sampleBuffer {
-  if (nil != _sampleBuffer) {
-    CFRelease(_sampleBuffer);
-    _sampleBuffer = nil;
-  }
+    if (nil != _sampleBuffer) {
+        CFRelease(_sampleBuffer);
+        _sampleBuffer = nil;
+    }
 
-  _sampleBuffer = sampleBuffer;
-  if (nil != sampleBuffer) {
-    CFRetain(sampleBuffer);
-  }
+    _sampleBuffer = sampleBuffer;
+    if (nil != sampleBuffer) {
+        CFRetain(sampleBuffer);
+    }
 }
 
 @end

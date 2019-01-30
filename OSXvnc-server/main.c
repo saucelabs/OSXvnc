@@ -288,7 +288,8 @@ void rfbCheckForScreenResolutionChange() {
 
                     rfbSendScreenUpdateEncoding(cl);
 
-                    cl->screenBuffer = rfbGetFramebuffer();
+                    size_t framebufferLength;
+                    cl->screenBuffer = rfbGetFramebuffer(&framebufferLength);
                     if (cl->scalingFactor == 1) {
                         cl->scalingFrameBuffer = cl->screenBuffer;
                         cl->scalingPaddedWidthInBytes = rfbScreen.paddedWidthInBytes;
@@ -341,16 +342,16 @@ static const NSTimeInterval REFERENCE_FRAME_INTERVAL = 0.4;
 static const NSTimeInterval FULL_SCREEN_REFRESH_INTERVAL = 2.0;
 
 static Bool rfbShouldRefreshFullScreen(rfbClientPtr cl) {
-  if (cl->previousFullScreenSyncTimestamp == cl->previousFramebufferDeliveryTimestamp) {
-    return FALSE;
-  }
-  NSTimeInterval timeElapsedSincePreviousSync = timebaseSeconds * (mach_absolute_time() - cl->previousFullScreenSyncTimestamp);
-  return timeElapsedSincePreviousSync >= FULL_SCREEN_REFRESH_INTERVAL;
+    if (cl->previousFullScreenSyncTimestamp == cl->previousFramebufferDeliveryTimestamp) {
+        return FALSE;
+    }
+    NSTimeInterval timeElapsedSincePreviousSync = timebaseSeconds * (mach_absolute_time() - cl->previousFullScreenSyncTimestamp);
+    return timeElapsedSincePreviousSync >= FULL_SCREEN_REFRESH_INTERVAL;
 }
 
 static Bool rfbIsReferenceFrame(rfbClientPtr cl) {
-  NSTimeInterval timeElapsed = timebaseSeconds * (mach_absolute_time() - cl->previousReferenceFramebufferTimestamp);
-  return timeElapsed >= REFERENCE_FRAME_INTERVAL;
+    NSTimeInterval timeElapsed = timebaseSeconds * (mach_absolute_time() - cl->previousReferenceFramebufferTimestamp);
+    return timeElapsed >= REFERENCE_FRAME_INTERVAL;
 }
 
 static void *clientOutput(void *data) {
@@ -361,8 +362,8 @@ static void *clientOutput(void *data) {
 
     static dispatch_once_t onceStreamingInit;
     dispatch_once(&onceStreamingInit, ^{
-      mach_timebase_info(&timebaseInfo);
-      timebaseSeconds = 1e-9 * (NSTimeInterval) timebaseInfo.numer / (NSTimeInterval) timebaseInfo.denom;
+        mach_timebase_info(&timebaseInfo);
+        timebaseSeconds = 1e-9 * (NSTimeInterval) timebaseInfo.numer / (NSTimeInterval) timebaseInfo.denom;
     });
 
     while (1) {
@@ -382,120 +383,128 @@ static void *clientOutput(void *data) {
 
             // Only do checks if we HAVE an outstanding request
             if (REGION_NOTEMPTY(&hackScreen, &cl->requestedRegion)) {
-              if (rfbDeferUpdateTime > 0 && !cl->immediateUpdate) {
-                if (rfbShouldRefreshFullScreen(cl)) {
-                  shouldPerformFullscreenSync = TRUE;
-                  haveUpdate = TRUE;
-                } else {
-                  // Compare Request with Update Area
-                  REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
-                  REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
-                  haveUpdate = REGION_NOTEMPTY(&hackScreen, &updateRegion);
-                  REGION_UNINIT(&hackScreen, &updateRegion);
-                }
+                if (rfbDeferUpdateTime > 0 && !cl->immediateUpdate) {
+                    if (rfbShouldRefreshFullScreen(cl)) {
+                        shouldPerformFullscreenSync = TRUE;
+                        haveUpdate = TRUE;
+                    } else {
+                        // Compare Request with Update Area
+                        REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
+                        REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
+                        haveUpdate = REGION_NOTEMPTY(&hackScreen, &updateRegion);
+                        REGION_UNINIT(&hackScreen, &updateRegion);
+                    }
 
-                if (!haveUpdate) {
-                  if (rfbShouldSendNewCursor(cl))
-                    haveUpdate = TRUE;
-                  else if (rfbShouldSendNewPosition(cl))
-                    // Could Compare with the request area but for now just always send it
-                    haveUpdate = TRUE;
-                  else if (cl->needNewScreenSize)
+                    if (!haveUpdate) {
+                        if (rfbShouldSendNewCursor(cl))
+                            haveUpdate = TRUE;
+                        else if (rfbShouldSendNewPosition(cl))
+                            // Could Compare with the request area but for now just always send it
+                            haveUpdate = TRUE;
+                        else if (cl->needNewScreenSize)
+                            haveUpdate = TRUE;
+                    }
+                } else {
+                    /*  If we've turned off deferred updating
+                     We are going to send an update as soon as we have a requested,
+                     regardless of if we have a "change" intersection */
                     haveUpdate = TRUE;
                 }
-              } else {
-                /*  If we've turned off deferred updating
-                 We are going to send an update as soon as we have a requested,
-                 regardless of if we have a "change" intersection */
-                haveUpdate = TRUE;
-              }
             }
 
             if (!haveUpdate)
                 pthread_cond_wait(&cl->updateCond, &cl->updateMutex);
         }
 
-        cl->screenBuffer = rfbGetFramebuffer();
+        size_t framebufferLength;
+        cl->screenBuffer = rfbGetFramebuffer(&framebufferLength);
+        if (nil == cl->screenBuffer) {
+            pthread_mutex_unlock(&cl->updateMutex);
+            continue;
+        }
+
         size_t dataLength;
         uint64_t timestamp;
         char *frameData = rfbGetRecentFrameData(&dataLength, &timestamp);
-        if (nil != frameData) {
-          if (timestamp == cl->previousFramebufferTimestamp
-              && cl->previousFramebufferDeliveryTimestamp > 0
-              && !cl->immediateUpdate
-              && !shouldPerformFullscreenSync) {
+        if (nil == frameData || framebufferLength != dataLength) {
+            pthread_mutex_unlock(&cl->updateMutex);
+            continue;
+        }
+
+        shouldPerformFullscreenSync = shouldPerformFullscreenSync || rfbShouldRefreshFullScreen(cl);
+        if (timestamp == cl->previousFramebufferTimestamp
+            && cl->previousFramebufferDeliveryTimestamp > 0
+            && !cl->immediateUpdate
+            && !shouldPerformFullscreenSync) {
             // Perform throttling to save the bandwidth
             uint64_t timeElapsed = mach_absolute_time() - cl->previousFramebufferDeliveryTimestamp;
             uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
             int64_t microsecRemainingTillNextFrame = rfbDeferUpdateTime * 1000 - nsElapsed / 1000;
             if (microsecRemainingTillNextFrame > 0) {
-              pthread_mutex_unlock(&cl->updateMutex);
-              usleep((useconds_t)microsecRemainingTillNextFrame);
-              pthread_mutex_lock(&cl->updateMutex);
-              free(frameData);
-              frameData = rfbGetRecentFrameData(&dataLength, &timestamp);
+                pthread_mutex_unlock(&cl->updateMutex);
+                usleep((useconds_t)microsecRemainingTillNextFrame);
+                pthread_mutex_lock(&cl->updateMutex);
+                free(frameData);
+                frameData = rfbGetRecentFrameData(&dataLength, &timestamp);
             }
-          }
         }
 
         Bool isReferenceFrame = FALSE;
-        if (nil != frameData) {
-            isReferenceFrame = shouldPerformFullscreenSync || rfbIsReferenceFrame(cl);
-            memcpy(cl->screenBuffer, frameData, dataLength);
-            free(frameData);
-            frameData = nil;
-            if (isReferenceFrame) {
-              cl->previousReferenceFramebufferTimestamp = timestamp;
-            }
-            cl->previousFramebufferTimestamp = timestamp;
-
-            if (shouldPerformFullscreenSync) {
-              BoxRec box;
-              box.x1 = box.y1 = 0;
-              box.x2 = rfbScreen.width;
-              box.y2 = rfbScreen.height;
-              REGION_UNINIT(&hackScreen, &cl->modifiedRegion);
-              REGION_INIT(pScreen, &cl->modifiedRegion, &box, 0);
-            }
-
-            /* Now, get the region we're going to update, and remove
-                it from cl->modifiedRegion _before_ we send the update.
-                That way, if anything that overlaps the region we're sending
-                is updated, we'll be sure to do another update later. */
-            REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
-            REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
-            if (isReferenceFrame) {
-              REGION_SUBTRACT(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &updateRegion);
-            }
-            /* REDSTONE - We also want to clear out the requested region, so we don't process
-                graphic updates in previously requested regions */
-            REGION_UNINIT(&hackScreen, &cl->requestedRegion);
-            REGION_INIT(&hackScreen, &cl->requestedRegion, NullBox, 0);
-
-            /*  This does happen but it's asynchronous (and slow to occur)
-                what we really want to happen is to just temporarily hide the cursor (while sending to the remote screen)
-                -- It's not even usually there (as it's handled by the display driver - but under certain occasions it does appear
-             displayErr = CGDisplayHideCursor(displayID);
-             if (displayErr != 0)
-             rfbLog("Error Hiding Cursor %d", displayErr);
-             CGDisplayMoveCursorToPoint(displayID, CGPointZero); */
-
-            /* Now actually send the update. */
-            if (rfbSendFramebufferUpdate(cl, updateRegion)) {
-              cl->previousFramebufferDeliveryTimestamp = mach_absolute_time();
-              if (shouldPerformFullscreenSync) {
-                cl->previousFullScreenSyncTimestamp = cl->previousFramebufferDeliveryTimestamp;
-              }
-            }
-
-            /* If we were hiding it before make it reappear now
-                displayErr = CGDisplayShowCursor(displayID);
-            if (displayErr != 0)
-                rfbLog("Error Showing Cursor %d", displayErr);
-            */
-
-            REGION_UNINIT(&hackScreen, &updateRegion);
+        isReferenceFrame = shouldPerformFullscreenSync || rfbIsReferenceFrame(cl);
+        memcpy(cl->screenBuffer, frameData, dataLength);
+        free(frameData);
+        frameData = nil;
+        if (isReferenceFrame) {
+            cl->previousReferenceFramebufferTimestamp = timestamp;
         }
+        cl->previousFramebufferTimestamp = timestamp;
+
+        if (shouldPerformFullscreenSync) {
+            BoxRec box;
+            box.x1 = box.y1 = 0;
+            box.x2 = rfbScreen.width;
+            box.y2 = rfbScreen.height;
+            REGION_UNINIT(&hackScreen, &cl->modifiedRegion);
+            REGION_INIT(pScreen, &cl->modifiedRegion, &box, 0);
+        }
+
+        /* Now, get the region we're going to update, and remove
+         it from cl->modifiedRegion _before_ we send the update.
+         That way, if anything that overlaps the region we're sending
+         is updated, we'll be sure to do another update later. */
+        REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
+        REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
+        if (isReferenceFrame) {
+            REGION_SUBTRACT(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &updateRegion);
+        }
+        /* REDSTONE - We also want to clear out the requested region, so we don't process
+         graphic updates in previously requested regions */
+        REGION_UNINIT(&hackScreen, &cl->requestedRegion);
+        REGION_INIT(&hackScreen, &cl->requestedRegion, NullBox, 0);
+
+        /*  This does happen but it's asynchronous (and slow to occur)
+         what we really want to happen is to just temporarily hide the cursor (while sending to the remote screen)
+         -- It's not even usually there (as it's handled by the display driver - but under certain occasions it does appear
+         displayErr = CGDisplayHideCursor(displayID);
+         if (displayErr != 0)
+         rfbLog("Error Hiding Cursor %d", displayErr);
+         CGDisplayMoveCursorToPoint(displayID, CGPointZero); */
+
+        /* Now actually send the update. */
+        if (rfbSendFramebufferUpdate(cl, updateRegion)) {
+            cl->previousFramebufferDeliveryTimestamp = mach_absolute_time();
+            if (shouldPerformFullscreenSync) {
+                cl->previousFullScreenSyncTimestamp = cl->previousFramebufferDeliveryTimestamp;
+            }
+        }
+
+        /* If we were hiding it before make it reappear now
+         displayErr = CGDisplayShowCursor(displayID);
+         if (displayErr != 0)
+         rfbLog("Error Showing Cursor %d", displayErr);
+         */
+
+        REGION_UNINIT(&hackScreen, &updateRegion);
         pthread_mutex_unlock(&cl->updateMutex);
     }
 
@@ -655,7 +664,8 @@ void connectReverseClient(char *hostName, int portNum) {
     }
 }
 
-static char *frameBufferData = NULL;
+static char *frameBufferData = nil;
+static size_t frameBufferLength = 0;
 
 // this method can be used for debug purposes
 BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, NSString *path) {
@@ -697,27 +707,27 @@ BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, NSString *p
 }
 
 char *extractFrameData(CMSampleBufferRef frameBuffer, size_t *dataLength) {
-  CVImageBufferRef screenBuffer = CMSampleBufferGetImageBuffer(frameBuffer);
-  CVPixelBufferLockBaseAddress(screenBuffer, 0);
-  char *baseAddress = CVPixelBufferGetBaseAddress(screenBuffer);
-  const size_t screenWidth = CVPixelBufferGetWidth(screenBuffer);
-  const size_t screenHeight = CVPixelBufferGetHeight(screenBuffer);
-  const size_t pixelsLength = BYTES_PER_PIXEL * screenWidth * screenHeight;
-  char *pixels = malloc(pixelsLength);
-  memcpy(pixels, baseAddress, pixelsLength);
-  CVPixelBufferUnlockBaseAddress(screenBuffer, 0);
-  CFRelease(frameBuffer);
-  *dataLength = pixelsLength;
-  return pixels;
+    CVImageBufferRef screenBuffer = CMSampleBufferGetImageBuffer(frameBuffer);
+    CVPixelBufferLockBaseAddress(screenBuffer, 0);
+    char *baseAddress = CVPixelBufferGetBaseAddress(screenBuffer);
+    const size_t screenWidth = CVPixelBufferGetWidth(screenBuffer);
+    const size_t screenHeight = CVPixelBufferGetHeight(screenBuffer);
+    const size_t pixelsLength = BYTES_PER_PIXEL * screenWidth * screenHeight;
+    char *pixels = malloc(pixelsLength);
+    memcpy(pixels, baseAddress, pixelsLength);
+    CVPixelBufferUnlockBaseAddress(screenBuffer, 0);
+    CFRelease(frameBuffer);
+    *dataLength = pixelsLength;
+    return pixels;
 }
 
 char *rfbGetNextFrameData(size_t *dataLength, uint64_t *timestamp, NSTimeInterval timeout) {
-  CMSampleBufferRef sampleBuffer;
-  if (![vncScreenCapture retrieveNextFrame:&sampleBuffer timestamp:timestamp timeout:timeout]) {
-    rfbLog("There was an error getting the screen shot");
-    return nil;
-  }
-  return extractFrameData(sampleBuffer, dataLength);
+    CMSampleBufferRef sampleBuffer;
+    if (![vncScreenCapture retrieveNextFrame:&sampleBuffer timestamp:timestamp timeout:timeout]) {
+        rfbLog("There was an error getting the screen shot");
+        return nil;
+    }
+    return extractFrameData(sampleBuffer, dataLength);
 }
 
 char *rfbGetRecentFrameData(size_t *dataLength, uint64_t *timestamp) {
@@ -729,36 +739,16 @@ char *rfbGetRecentFrameData(size_t *dataLength, uint64_t *timestamp) {
     return extractFrameData(sampleBuffer, dataLength);
 }
 
-char *rfbGetFramebuffer(void) {
-    if (floor(NSAppKitVersionNumber) > floor(NSAppKitVersionNumber10_6)) {
-        if (NULL == frameBufferData) {
-            size_t length;
-            uint64_t timestamp;
-            char *frameData = rfbGetRecentFrameData(&length, &timestamp);
-            if (nil != frameData) {
-                frameBufferData = frameData;
-            }
+char *rfbGetFramebuffer(size_t *bufferLength) {
+    if (nil == frameBufferData) {
+        uint64_t timestamp;
+        char *frameData = rfbGetRecentFrameData(&frameBufferLength, &timestamp);
+        if (nil != frameData) {
+            frameBufferData = frameData;
         }
-        return frameBufferData;
     }
-    
-    // Old API is required for off screen user sessions
-    int maxWait =   5000000;
-    int retryWait =  500000;
-
-    char *returnValue = (char *)CGDisplayBaseAddress(displayID);
-    while (!returnValue && maxWait > 0) {
-        NSLog(@"Unable to obtain base address");
-        usleep(retryWait); // Buffer goes away while screen is "switching", it'll be back
-        maxWait -= retryWait;
-        returnValue = (char *)CGDisplayBaseAddress(displayID);
-    }
-    if (!returnValue) {
-        NSLog(@"Unable to obtain base address -- Giving up");
-        exit(1);
-    }
-
-    return returnValue;
+    *bufferLength = frameBufferLength;
+    return frameBufferData;
 }
 
 static bool rfbScreenInit(void) {
@@ -767,10 +757,11 @@ static bool rfbScreenInit(void) {
     int bitsPerSample = 8; // Let's presume 8 bits x 3 samples and hope for the best.....
     int samplesPerPixel = 3;
 
-    if (NULL != frameBufferData) {
+    if (nil != frameBufferData) {
         free(frameBufferData); // release previous screen buffer, if any
     }
-    frameBufferData = NULL;
+    frameBufferLength = 0;
+    frameBufferData = nil;
 
     if (displayID == 0) {
         // The display was not selected up to now, so choose the main display.
