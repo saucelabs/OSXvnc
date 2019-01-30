@@ -710,10 +710,10 @@ char *rfbGetFramebuffer(size_t *bufferLength) {
         char *frameData = rfbGetNextFrameData(&frameBufferLength, &timestamp, 2.0);
         if (nil != frameData) {
             frameBufferData = frameData;
-            if (bufferLength) {
-                *bufferLength = frameBufferLength;
-            }
         }
+    }
+    if (bufferLength) {
+        *bufferLength = frameBufferLength;
     }
     return frameBufferData;
 }
