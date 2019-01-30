@@ -666,45 +666,6 @@ void connectReverseClient(char *hostName, int portNum) {
 static char *frameBufferData = nil;
 static size_t frameBufferLength = 0;
 
-// this method can be used for debug purposes
-BOOL CGBitapDataWriteToFile(char *data, size_t width, size_t height, NSString *path) {
-    CFURLRef url = (__bridge CFURLRef)[NSURL fileURLWithPath:path];
-    CGImageDestinationRef destination = CGImageDestinationCreateWithURL(url, kUTTypePNG, 1, NULL);
-    CFRelease(url);
-    if (!destination) {
-        NSLog(@"Failed to create CGImageDestination for %@", path);
-        return NO;
-    }
-    
-    CGColorSpaceRef colorspace = CGColorSpaceCreateDeviceRGB();
-    CGContextRef context = CGBitmapContextCreate(data,
-                                                 width,
-                                                 height,
-                                                 8,
-                                                 BYTES_PER_PIXEL * width,
-                                                 colorspace,
-                                                 // For RGBA color space
-                                                 kCGImageAlphaNoneSkipLast);
-    CGColorSpaceRelease(colorspace);
-    CGImageRef image = CGBitmapContextCreateImage(context);
-    CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
-    CGImageRef imageRef = CGBitmapContextCreateImage(context);
-    CGContextRelease(context);
-    CGImageRelease(image);
-    
-    CGImageDestinationAddImage(destination, imageRef, nil);
-    
-    if (!CGImageDestinationFinalize(destination)) {
-        NSLog(@"Failed to write image to %@", path);
-        CFRelease(destination);
-        return NO;
-    }
-    
-    CFRelease(destination);
-    CFRelease(imageRef);
-    return YES;
-}
-
 char *extractFrameData(CMSampleBufferRef frameBuffer, size_t *dataLength, size_t *paddedWidth) {
     CVImageBufferRef screenBuffer = CMSampleBufferGetImageBuffer(frameBuffer);
     CVPixelBufferLockBaseAddress(screenBuffer, 0);
@@ -749,10 +710,10 @@ char *rfbGetFramebuffer(size_t *bufferLength) {
         char *frameData = rfbGetNextFrameData(&frameBufferLength, &timestamp, 2.0);
         if (nil != frameData) {
             frameBufferData = frameData;
+            if (bufferLength) {
+                *bufferLength = frameBufferLength;
+            }
         }
-    }
-    if (bufferLength) {
-        *bufferLength = frameBufferLength;
     }
     return frameBufferData;
 }
@@ -802,8 +763,12 @@ static bool rfbScreenInit(void) {
         CMSampleBufferRef sampleBuffer;
         if ([vncScreenCapture retrieveNextFrame:&sampleBuffer timestamp:nil timeout:2.0]) {
             size_t paddedWidth;
-            extractFrameData(sampleBuffer, nil, &paddedWidth);
-            rfbScreen.paddedWidthInBytes = (int) paddedWidth;
+            char *frameData = extractFrameData(sampleBuffer, nil, &paddedWidth);
+            if (nil != frameData) {
+                rfbScreen.paddedWidthInBytes = (int) paddedWidth;
+                free(frameData);
+                frameData = nil;
+            }
         }
     } else {
         rfbScreen.paddedWidthInBytes = (int) CGDisplayBytesPerRow(displayID);
