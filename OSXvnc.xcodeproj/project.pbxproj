@@ -24,6 +24,7 @@
 /* Begin PBXBuildFile section */
 		13F8D24121ECDB1F007A9209 /* AVScreenCapture.m in Sources */ = {isa = PBXBuildFile; fileRef = 13F8D24021ECDB1F007A9209 /* AVScreenCapture.m */; };
 		713DBE9321F36C3300CC2EC3 /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 713DBE9221F36C3300CC2EC3 /* CoreMedia.framework */; };
+		71DD0BC02202E6570091B9FF /* ImageComparator.mm in Sources */ = {isa = PBXBuildFile; fileRef = 71DD0BBF2202E6570091B9FF /* ImageComparator.mm */; };
 		71FB44E421F343D100061CBA /* AVSampleBufferHolder.m in Sources */ = {isa = PBXBuildFile; fileRef = 71FB44E321F343D100061CBA /* AVSampleBufferHolder.m */; };
 		71FB44E621F35D1D00061CBA /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71FB44E521F35D1D00061CBA /* AVFoundation.framework */; };
 		71FB44E821F35DCF00061CBA /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71FB44E721F35DCF00061CBA /* CoreVideo.framework */; };
@@ -148,6 +149,8 @@
 		13F8D24021ECDB1F007A9209 /* AVScreenCapture.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AVScreenCapture.m; sourceTree = "<group>"; };
 		29B97316FDCFA39411CA2CEA /* main.m */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		713DBE9221F36C3300CC2EC3 /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
+		71DD0BBE2202E6570091B9FF /* ImageComparator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ImageComparator.h; sourceTree = "<group>"; };
+		71DD0BBF2202E6570091B9FF /* ImageComparator.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ImageComparator.mm; sourceTree = "<group>"; };
 		71FB44E221F343D100061CBA /* AVSampleBufferHolder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AVSampleBufferHolder.h; sourceTree = "<group>"; };
 		71FB44E321F343D100061CBA /* AVSampleBufferHolder.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AVSampleBufferHolder.m; sourceTree = "<group>"; };
 		71FB44E521F35D1D00061CBA /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
@@ -391,6 +394,8 @@
 				71FB44E321F343D100061CBA /* AVSampleBufferHolder.m */,
 				13F8D23F21ECDB1F007A9209 /* AVScreenCapture.h */,
 				13F8D24021ECDB1F007A9209 /* AVScreenCapture.m */,
+				71DD0BBE2202E6570091B9FF /* ImageComparator.h */,
+				71DD0BBF2202E6570091B9FF /* ImageComparator.mm */,
 				F58DDDE7056A861001A8015E /* VNCServer.h */,
 				F58DDDE8056A861001A8015E /* VNCServer.m */,
 				ABA7B3D10948CB5D00CD7499 /* d3des.c */,
@@ -711,6 +716,7 @@
 				AB25D897086870430065843D /* cutpaste.c in Sources */,
 				AB25D898086870440065843D /* dimming.c in Sources */,
 				AB25D899086870460065843D /* VNCServer.m in Sources */,
+				71DD0BC02202E6570091B9FF /* ImageComparator.mm in Sources */,
 				AB25D89A086870490065843D /* mousecursor.c in Sources */,
 				AB25D89B0868704A0065843D /* hextile.c in Sources */,
 				AB25D89C0868704B0065843D /* kbdptr.c in Sources */,
@@ -893,10 +899,15 @@
 				HEADER_SEARCH_PATHS = (
 					"OSXvnc-server",
 					"OSXvnc-server/include",
+					"/usr/local/opt/opencv@2/include",
 					"/opt/libjpeg-turbo/include",
 				);
-				LIBRARY_SEARCH_PATHS = "";
-				"OTHER_LDFLAGS[arch=*]" = "/opt/libjpeg-turbo/lib/libturbojpeg.a";
+				LIBRARY_SEARCH_PATHS = "/usr/local/opt/opencv@2/lib";
+				"OTHER_LDFLAGS[arch=*]" = (
+					"/opt/libjpeg-turbo/lib/libturbojpeg.a",
+					"-lopencv_imgproc",
+					"-lopencv_core",
+				);
 				PRODUCT_NAME = "OSXvnc-server";
 				PROVISIONING_PROFILE = "";
 			};
@@ -911,11 +922,16 @@
 				HEADER_SEARCH_PATHS = (
 					"OSXvnc-server",
 					"OSXvnc-server/include",
+					"/usr/local/opt/opencv@2/include",
 					"/opt/libjpeg-turbo/include",
 				);
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "/usr/local/opt/opencv@2/lib";
 				MACH_O_TYPE = mh_execute;
-				"OTHER_LDFLAGS[arch=*]" = "/opt/libjpeg-turbo/lib/libturbojpeg.a";
+				"OTHER_LDFLAGS[arch=*]" = (
+					"/opt/libjpeg-turbo/lib/libturbojpeg.a",
+					"-lopencv_imgproc",
+					"-lopencv_core",
+				);
 				PRODUCT_NAME = "OSXvnc-server";
 				PROVISIONING_PROFILE = "";
 				STRIP_INSTALLED_PRODUCT = NO;

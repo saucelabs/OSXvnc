@@ -326,6 +326,7 @@ typedef struct rfbClientRec {
     uint64_t previousFramebufferDeliveryTimestamp;
     uint64_t previousReferenceFramebufferTimestamp;
     uint64_t previousFullScreenSyncTimestamp;
+    char *previousFramebuffer;
 } rfbClientRec, *rfbClientPtr;
 
 

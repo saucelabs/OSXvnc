@@ -41,6 +41,7 @@
 #include "rfbserver.h"
 #import "AVScreenCapture.h"
 #import "VNCServer.h"
+#import "ImageComparator.h"
 
 static ScreenRec hackScreen;
 rfbScreenInfo rfbScreen;
@@ -383,16 +384,17 @@ static void *clientOutput(void *data) {
             // Only do checks if we HAVE an outstanding request
             if (REGION_NOTEMPTY(&hackScreen, &cl->requestedRegion)) {
                 if (rfbDeferUpdateTime > 0 && !cl->immediateUpdate) {
-                    if (rfbShouldRefreshFullScreen(cl)) {
-                        shouldPerformFullscreenSync = TRUE;
-                        haveUpdate = TRUE;
-                    } else {
+//                    if (rfbShouldRefreshFullScreen(cl)) {
+//                        shouldPerformFullscreenSync = TRUE;
+//                        haveUpdate = TRUE;
+//                    } else {
                         // Compare Request with Update Area
-                        REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
-                        REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
-                        haveUpdate = REGION_NOTEMPTY(&hackScreen, &updateRegion);
-                        REGION_UNINIT(&hackScreen, &updateRegion);
-                    }
+//                        REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
+//                        REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
+//                        haveUpdate = REGION_NOTEMPTY(&hackScreen, &updateRegion);
+//                        REGION_UNINIT(&hackScreen, &updateRegion);
+//                    }
+                    haveUpdate = TRUE;
 
                     if (!haveUpdate) {
                         if (rfbShouldSendNewCursor(cl))
@@ -430,46 +432,84 @@ static void *clientOutput(void *data) {
             continue;
         }
 
-        shouldPerformFullscreenSync = shouldPerformFullscreenSync || rfbShouldRefreshFullScreen(cl);
-        if (timestamp == cl->previousFramebufferTimestamp
-            && cl->previousFramebufferDeliveryTimestamp > 0
-            && !cl->immediateUpdate
-            && !shouldPerformFullscreenSync) {
-            // Perform throttling to save the bandwidth
-            uint64_t timeElapsed = mach_absolute_time() - cl->previousFramebufferDeliveryTimestamp;
-            uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
-            int64_t microsecRemainingTillNextFrame = rfbDeferUpdateTime * 1000 - nsElapsed / 1000;
-            if (microsecRemainingTillNextFrame > 0) {
-                pthread_mutex_unlock(&cl->updateMutex);
-                usleep((useconds_t)microsecRemainingTillNextFrame);
-                pthread_mutex_lock(&cl->updateMutex);
-                free(frameData);
-                frameData = rfbGetRecentFrameData(&dataLength, &timestamp);
-                if (nil == frameData || framebufferLength != dataLength) {
-                    pthread_mutex_unlock(&cl->updateMutex);
-                    continue;
-                }
-            }
-        }
+//        shouldPerformFullscreenSync = shouldPerformFullscreenSync || rfbShouldRefreshFullScreen(cl);
+//        if (timestamp == cl->previousFramebufferTimestamp
+//            && cl->previousFramebufferDeliveryTimestamp > 0
+//            && !cl->immediateUpdate
+//            && !shouldPerformFullscreenSync) {
+//            // Perform throttling to save the bandwidth
+//            uint64_t timeElapsed = mach_absolute_time() - cl->previousFramebufferDeliveryTimestamp;
+//            uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
+//            int64_t microsecRemainingTillNextFrame = rfbDeferUpdateTime * 1000 - nsElapsed / 1000;
+//            if (microsecRemainingTillNextFrame > 0) {
+//                pthread_mutex_unlock(&cl->updateMutex);
+//                usleep((useconds_t)microsecRemainingTillNextFrame);
+//                pthread_mutex_lock(&cl->updateMutex);
+//                free(frameData);
+//                frameData = rfbGetRecentFrameData(&dataLength, &timestamp);
+//                if (nil == frameData || framebufferLength != dataLength) {
+//                    pthread_mutex_unlock(&cl->updateMutex);
+//                    continue;
+//                }
+//            }
+//        }
 
         Bool isReferenceFrame = FALSE;
         isReferenceFrame = shouldPerformFullscreenSync || rfbIsReferenceFrame(cl);
         memcpy(cl->screenBuffer, frameData, dataLength);
-        free(frameData);
-        frameData = nil;
         if (isReferenceFrame) {
             cl->previousReferenceFramebufferTimestamp = timestamp;
         }
         cl->previousFramebufferTimestamp = timestamp;
 
-        if (shouldPerformFullscreenSync) {
-            BoxRec box;
-            box.x1 = box.y1 = 0;
-            box.x2 = rfbScreen.width;
-            box.y2 = rfbScreen.height;
+//        if (shouldPerformFullscreenSync) {
+//            BoxRec box;
+//            box.x1 = box.y1 = 0;
+//            box.x2 = rfbScreen.width;
+//            box.y2 = rfbScreen.height;
+//            REGION_UNINIT(&hackScreen, &cl->modifiedRegion);
+//            REGION_INIT(pScreen, &cl->modifiedRegion, &box, 0);
+//        }
+
+        if (nil != cl->previousFramebuffer) {
+            NSLog(@"Calculating contours");
+            char *rectangles;
+            size_t rectanglesCount;
+            [ImageComparator compareImage1:frameData
+                                  toImage2:cl->previousFramebuffer
+                                     width:rfbScreen.width
+                                    height:rfbScreen.height
+                             bytesPerPixel:rfbScreen.bitsPerPixel / 8
+                                rectangles:&rectangles
+                           rectanglesCount:&rectanglesCount];
             REGION_UNINIT(&hackScreen, &cl->modifiedRegion);
-            REGION_INIT(pScreen, &cl->modifiedRegion, &box, 0);
+            REGION_INIT(&hackScreen, &cl->modifiedRegion, NullBox, 0);
+            for (size_t rectangleIdx = 0; rectangleIdx < rectanglesCount; ++rectangleIdx) {
+                RegionRec tmpRegion;
+                BoxRec box;
+                memcpy(&box, rectangles + rectangleIdx * sizeof(BoxRec), sizeof(BoxRec));
+                SAFE_REGION_INIT(&hackScreen, &tmpRegion, &box, 0);
+                REGION_UNION(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &tmpRegion);
+                REGION_UNINIT(&hackScreen, &tmpRegion);
+            }
+            free(rectangles);
+            rectangles = nil;
+            NSLog(@"Got %@ contours", @(rectanglesCount));
         }
+
+//        if (timestamp == cl->previousFramebufferTimestamp
+//            && cl->previousFramebufferDeliveryTimestamp > 0
+//            && !cl->immediateUpdate) {
+//            // Perform throttling to save the bandwidth
+//            uint64_t timeElapsed = mach_absolute_time() - cl->previousFramebufferDeliveryTimestamp;
+//            uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
+//            int64_t microsecRemainingTillNextFrame = rfbDeferUpdateTime * 1000 - nsElapsed / 1000;
+//            if (microsecRemainingTillNextFrame > 0) {
+//                pthread_mutex_unlock(&cl->updateMutex);
+//                usleep((useconds_t)microsecRemainingTillNextFrame);
+//                pthread_mutex_lock(&cl->updateMutex);
+//            }
+//        }
 
         /* Now, get the region we're going to update, and remove
          it from cl->modifiedRegion _before_ we send the update.
@@ -477,9 +517,9 @@ static void *clientOutput(void *data) {
          is updated, we'll be sure to do another update later. */
         REGION_INIT(&hackScreen, &updateRegion, NullBox, 0);
         REGION_INTERSECT(&hackScreen, &updateRegion, &cl->modifiedRegion, &cl->requestedRegion);
-        if (isReferenceFrame) {
+//        if (isReferenceFrame) {
             REGION_SUBTRACT(&hackScreen, &cl->modifiedRegion, &cl->modifiedRegion, &updateRegion);
-        }
+//        }
         /* REDSTONE - We also want to clear out the requested region, so we don't process
          graphic updates in previously requested regions */
         REGION_UNINIT(&hackScreen, &cl->requestedRegion);
@@ -493,13 +533,22 @@ static void *clientOutput(void *data) {
          rfbLog("Error Hiding Cursor %d", displayErr);
          CGDisplayMoveCursorToPoint(displayID, CGPointZero); */
 
+        NSLog(@"Sending buffer");
         /* Now actually send the update. */
         if (rfbSendFramebufferUpdate(cl, updateRegion)) {
             cl->previousFramebufferDeliveryTimestamp = mach_absolute_time();
             if (shouldPerformFullscreenSync) {
                 cl->previousFullScreenSyncTimestamp = cl->previousFramebufferDeliveryTimestamp;
             }
+            if (cl->previousFramebuffer) {
+                free(cl->previousFramebuffer);
+            }
+            cl->previousFramebuffer = frameData;
+        } else {
+            free(frameData);
+            frameData = nil;
         }
+        NSLog(@"Buffer sent");
 
         /* If we were hiding it before make it reappear now
          displayErr = CGDisplayShowCursor(displayID);
