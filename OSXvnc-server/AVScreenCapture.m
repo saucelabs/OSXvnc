@@ -74,14 +74,14 @@ const size_t BYTES_PER_PIXEL = 4;
         if (status != kCGDisplayStreamFrameStatusFrameComplete || !frameSurface || !updateRef) {
             return;
         }
-        @synchronized (self.sampleBufferHolder) {
-            self.sampleBufferHolder.sampleBuffer = frameSurface;
-            self.sampleBufferHolder.timestamp = displayTime;
-        }
         size_t count = 0;
         const CGRect* rects = CGDisplayStreamUpdateGetRects(updateRef, kCGDisplayStreamUpdateDirtyRects, &count);
         if (count > 0) {
             self.refreshCallback((uint32_t)count, rects, nil);
+        }
+        @synchronized (self.sampleBufferHolder) {
+            self.sampleBufferHolder.sampleBuffer = frameSurface;
+            self.sampleBufferHolder.timestamp = displayTime;
         }
     };
 
