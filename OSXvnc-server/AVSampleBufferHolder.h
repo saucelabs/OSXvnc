@@ -13,7 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface AVSampleBufferHolder : NSObject
 
-@property (assign, nonatomic, nullable) CMSampleBufferRef sampleBuffer;
+@property (assign, nonatomic, nullable) IOSurfaceRef sampleBuffer;
 @property (nonatomic) uint64_t timestamp;
 
 @end

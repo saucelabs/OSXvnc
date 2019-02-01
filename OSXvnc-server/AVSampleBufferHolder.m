@@ -29,7 +29,7 @@
     [super dealloc];
 }
 
-- (void)setSampleBuffer:(CMSampleBufferRef)sampleBuffer {
+- (void)setSampleBuffer:(IOSurfaceRef)sampleBuffer {
     if (nil != _sampleBuffer) {
         CFRelease(_sampleBuffer);
         _sampleBuffer = nil;
