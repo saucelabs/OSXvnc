@@ -12,14 +12,14 @@
 #import <mach/mach_time.h>
 #import "AVSampleBufferHolder.h"
 
-const int32_t MIN_FPS = 15;
-const int32_t MAX_FPS = 60;
 const size_t BYTES_PER_PIXEL = 4;
 
 @interface AVScreenCapture() <AVCaptureVideoDataOutputSampleBufferDelegate>
 
 @property (nonatomic, retain) AVSampleBufferHolder *sampleBufferHolder;
 @property (nonatomic) CGDisplayStreamRef displayStream;
+@property (nonatomic, readonly, assign) CGScreenRefreshCallback refreshCallback;
+@property (nonatomic, readonly, copy) NSMutableArray *fifo;
 
 @end
 
@@ -27,11 +27,13 @@ const size_t BYTES_PER_PIXEL = 4;
 
 @synthesize displayID = _displayID;
 
-- (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID
+- (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID refreshCallback:(CGScreenRefreshCallback)refreshCallback
 {
     if ((self = [super init])) {
         _displayID = displayID;
         _displayStream = nil;
+        _refreshCallback = refreshCallback;
+        _fifo = [[NSMutableArray alloc] init];
         _sampleBufferHolder = [[AVSampleBufferHolder alloc] init];
     }
     return self;
@@ -46,7 +48,7 @@ const size_t BYTES_PER_PIXEL = 4;
     [super dealloc];
 }
 
-- (BOOL)startWithWidth:(size_t)width height:(size_t)height refreshCallback:(CGScreenRefreshCallback)refreshCallback
+- (BOOL)startWithWidth:(size_t)width height:(size_t)height
 {
     if (nil != self.displayStream) {
         return YES;
@@ -56,9 +58,16 @@ const size_t BYTES_PER_PIXEL = 4;
                                                      IOSurfaceRef __nullable frameSurface,
                                                      CGDisplayStreamUpdateRef __nullable updateRef) {
         if (kCGDisplayStreamFrameStatusStopped == status) {
-            if (self.displayStream) {
-                CFRelease(self.displayStream);
-                self.displayStream = nil;
+            CGDisplayStreamRef streamRef = nil;
+            @synchronized (self.fifo) {
+                if (self.fifo.count > 0) {
+                    streamRef = (__bridge CGDisplayStreamRef)self.fifo.lastObject;
+                    [self.fifo removeObjectAtIndex:self.fifo.count - 1];
+                }
+            }
+            if (streamRef) {
+                CFRelease(streamRef);
+                streamRef = nil;
             }
         }
         // Only pay attention to frame updates.
@@ -72,7 +81,7 @@ const size_t BYTES_PER_PIXEL = 4;
         size_t count = 0;
         const CGRect* rects = CGDisplayStreamUpdateGetRects(updateRef, kCGDisplayStreamUpdateDirtyRects, &count);
         if (count > 0) {
-            refreshCallback((uint32_t)count, rects, nil);
+            self.refreshCallback((uint32_t)count, rects, nil);
         }
     };
 
@@ -106,6 +115,10 @@ const size_t BYTES_PER_PIXEL = 4;
     CFRunLoopSourceRef source = CGDisplayStreamGetRunLoopSource(self.displayStream);
     CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, kCFRunLoopCommonModes);
     CGDisplayStreamStop(self.displayStream);
+    @synchronized (self.fifo) {
+        [self.fifo insertObject:(__bridge id)self.displayStream atIndex:0];
+    }
+    self.displayStream = nil;
 }
 
 - (BOOL)retrieveLastFrame:(IOSurfaceRef *)surface timestamp:(uint64_t *)timestamp

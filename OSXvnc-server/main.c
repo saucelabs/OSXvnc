@@ -718,10 +718,10 @@ static bool rfbScreenInit(void) {
         [vncScreenCapture release];
         vncScreenCapture = nil;
     }
-    vncScreenCapture = [[AVScreenCapture alloc] initWithDisplayID:displayID];
+    vncScreenCapture = [[AVScreenCapture alloc] initWithDisplayID:displayID
+                                                  refreshCallback:refreshCallback];
     [vncScreenCapture startWithWidth:rfbScreen.width
-                              height:rfbScreen.height
-                     refreshCallback:refreshCallback];
+                              height:rfbScreen.height];
 
     if (floor(NSAppKitVersionNumber) <= floor(NSAppKitVersionNumber10_6)) {
         rfbScreen.paddedWidthInBytes = (int) CGDisplayBytesPerRow(displayID);

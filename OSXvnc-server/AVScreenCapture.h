@@ -11,18 +11,16 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-extern const int32_t MIN_FPS;
-extern const int32_t MAX_FPS;
 extern const size_t BYTES_PER_PIXEL;
 
 @interface AVScreenCapture : NSObject
 
 @property (readonly) CGDirectDisplayID displayID;
 
-- (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID;
+- (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID
+                  refreshCallback:(CGScreenRefreshCallback)refreshCallback;
 - (BOOL)startWithWidth:(size_t)width
-                height:(size_t)height
-       refreshCallback:(CGScreenRefreshCallback)refreshCallback;
+                height:(size_t)height;
 - (BOOL)retrieveLastFrame:(IOSurfaceRef *)surface
                 timestamp:(nullable uint64_t *)timestamp;
 - (void)stop;
