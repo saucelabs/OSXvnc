@@ -338,7 +338,7 @@ static NSTimeInterval timebaseSeconds;
 static const NSTimeInterval REFERENCE_FRAME_INTERVAL = 0.4;
 // Force full screen update each X seconds to make sure there are
 // no synchronization artifacts on the remote screen
-static const NSTimeInterval FULL_SCREEN_REFRESH_INTERVAL = 2.0;
+static const NSTimeInterval FULL_SCREEN_REFRESH_INTERVAL = REFERENCE_FRAME_INTERVAL * 3;
 
 static Bool rfbShouldRefreshFullScreen(rfbClientPtr cl) {
     if (cl->previousFullScreenSyncTimestamp == cl->previousFramebufferDeliveryTimestamp) {
