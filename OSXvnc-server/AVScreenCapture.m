@@ -8,8 +8,6 @@
 
 #import "AVScreenCapture.h"
 
-#import <AppKit/AppKit.h>
-#import <mach/mach_time.h>
 #import "AVSampleBufferHolder.h"
 
 const size_t BYTES_PER_PIXEL = 4;
