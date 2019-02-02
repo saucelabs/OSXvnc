@@ -101,7 +101,7 @@ void * CGDisplayBaseAddress ( CGDirectDisplayID display );
 
 extern void rfbScreensaverTimer(EventLoopTimerRef timer, void *userData);
 
-int rfbDeferUpdateTime = 40; /* in ms */
+int rfbDeferUpdateTime = 1000 / DISPLAY_FPS; /* in ms */
 
 static char reverseHost[256] = "";
 static int reversePort = 5500;

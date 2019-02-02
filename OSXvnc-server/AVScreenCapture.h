@@ -11,7 +11,8 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-extern const size_t BYTES_PER_PIXEL;
+#define DISPLAY_FPS 30
+#define BYTES_PER_PIXEL 4
 
 @interface AVScreenCapture : NSObject
 
