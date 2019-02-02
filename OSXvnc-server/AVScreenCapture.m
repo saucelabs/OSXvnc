@@ -119,14 +119,12 @@
 
 - (BOOL)retrieveLastFrame:(IOSurfaceRef *)surface timestamp:(uint64_t *)timestamp
 {
-    if (nil == self.displayStream) {
+    if (nil == self.displayStream || nil == surface) {
         return NO;
     }
 
     @synchronized (self.sampleBufferHolder) {
-        if (surface) {
-            *surface = self.sampleBufferHolder.sampleBuffer;
-        }
+        *surface = self.sampleBufferHolder.sampleBuffer;
         if (timestamp) {
             *timestamp = self.sampleBufferHolder.timestamp;
         }
