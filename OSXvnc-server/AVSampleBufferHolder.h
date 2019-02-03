@@ -1,5 +1,5 @@
 //
-//  AVSampleBuffer.h
+//  AVSampleBufferHolder.h
 //  OSXvnc
 //
 //  Created by Mykola Mokhnach on 19.01.19.

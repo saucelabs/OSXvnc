@@ -1,5 +1,5 @@
 //
-//  AVScreenCapture.h
+//  AVScreenCapture.m
 //  OSXvnc
 //
 //  Created by Mykola Mokhnach on Mon Jan 14 2019.
