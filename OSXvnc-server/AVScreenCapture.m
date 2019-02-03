@@ -21,8 +21,6 @@
 
 @implementation AVScreenCapture
 
-@synthesize displayID = _displayID;
-
 - (instancetype)initWithDisplayID:(CGDirectDisplayID)displayID refreshCallback:(CGScreenRefreshCallback)refreshCallback
 {
     if ((self = [super init])) {
