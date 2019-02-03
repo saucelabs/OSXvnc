@@ -11,8 +11,6 @@
 
 @implementation AVSampleBufferHolder
 
-@synthesize timestamp = _timestamp;
-
 - (instancetype)init
 {
     if ((self = [super init])) {
