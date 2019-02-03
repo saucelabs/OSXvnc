@@ -330,7 +330,6 @@ void rfbCheckForScreenResolutionChange() {
 }
 
 static mach_timebase_info_data_t timebaseInfo;
-static NSTimeInterval timebaseSeconds;
 
 static void *clientOutput(void *data) {
     rfbClientPtr cl = (rfbClientPtr)data;
@@ -340,7 +339,6 @@ static void *clientOutput(void *data) {
     static dispatch_once_t onceStreamingInit;
     dispatch_once(&onceStreamingInit, ^{
         mach_timebase_info(&timebaseInfo);
-        timebaseSeconds = 1e-9 * (NSTimeInterval) timebaseInfo.numer / (NSTimeInterval) timebaseInfo.denom;
     });
 
     while (1) {
