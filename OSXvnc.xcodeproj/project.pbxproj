@@ -24,6 +24,7 @@
 /* Begin PBXBuildFile section */
 		13F8D24121ECDB1F007A9209 /* AVScreenCapture.m in Sources */ = {isa = PBXBuildFile; fileRef = 13F8D24021ECDB1F007A9209 /* AVScreenCapture.m */; };
 		713DBE9321F36C3300CC2EC3 /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 713DBE9221F36C3300CC2EC3 /* CoreMedia.framework */; };
+		71DD0BC52206F63E0091B9FF /* IOSurface.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71DD0BC42206F63E0091B9FF /* IOSurface.framework */; };
 		71FB44E421F343D100061CBA /* AVSampleBufferHolder.m in Sources */ = {isa = PBXBuildFile; fileRef = 71FB44E321F343D100061CBA /* AVSampleBufferHolder.m */; };
 		71FB44E621F35D1D00061CBA /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71FB44E521F35D1D00061CBA /* AVFoundation.framework */; };
 		71FB44E821F35DCF00061CBA /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71FB44E721F35DCF00061CBA /* CoreVideo.framework */; };
@@ -148,6 +149,7 @@
 		13F8D24021ECDB1F007A9209 /* AVScreenCapture.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AVScreenCapture.m; sourceTree = "<group>"; };
 		29B97316FDCFA39411CA2CEA /* main.m */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
 		713DBE9221F36C3300CC2EC3 /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
+		71DD0BC42206F63E0091B9FF /* IOSurface.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOSurface.framework; path = System/Library/Frameworks/IOSurface.framework; sourceTree = SDKROOT; };
 		71FB44E221F343D100061CBA /* AVSampleBufferHolder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AVSampleBufferHolder.h; sourceTree = "<group>"; };
 		71FB44E321F343D100061CBA /* AVSampleBufferHolder.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AVSampleBufferHolder.m; sourceTree = "<group>"; };
 		71FB44E521F35D1D00061CBA /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
@@ -287,6 +289,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				71DD0BC52206F63E0091B9FF /* IOSurface.framework in Frameworks */,
 				713DBE9321F36C3300CC2EC3 /* CoreMedia.framework in Frameworks */,
 				71FB44E821F35DCF00061CBA /* CoreVideo.framework in Frameworks */,
 				71FB44E621F35D1D00061CBA /* AVFoundation.framework in Frameworks */,
@@ -354,6 +357,7 @@
 		29B97323FDCFA39411CA2CEA /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				71DD0BC42206F63E0091B9FF /* IOSurface.framework */,
 				713DBE9221F36C3300CC2EC3 /* CoreMedia.framework */,
 				71FB44E721F35DCF00061CBA /* CoreVideo.framework */,
 				71FB44E521F35D1D00061CBA /* AVFoundation.framework */,

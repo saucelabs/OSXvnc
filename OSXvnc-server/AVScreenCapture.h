@@ -22,7 +22,8 @@ NS_ASSUME_NONNULL_BEGIN
                   refreshCallback:(CGScreenRefreshCallback)refreshCallback;
 - (BOOL)startWithWidth:(size_t)width
                 height:(size_t)height;
-- (BOOL)retrieveLastFrame:(IOSurfaceRef *)surface
+- (BOOL)retrieveLastFrame:(char **)frameData
+               dataLength:(nullable size_t *)dataLength
                 timestamp:(nullable uint64_t *)timestamp;
 - (void)stop;
 

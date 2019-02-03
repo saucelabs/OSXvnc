@@ -612,55 +612,15 @@ void connectReverseClient(char *hostName, int portNum) {
 static char *frameBufferData = nil;
 static size_t frameBufferLength = 0;
 
-char *extractFrameData(IOSurfaceRef surface, size_t *dataLength) {
-    CVReturn status = kCVReturnSuccess;
-    CVPixelBufferRef screenBuffer = NULL;
-    int pixelFormat = kCVPixelFormatType_32BGRA;
-    CFNumberRef number = CFNumberCreate(
-                                        ( CFAllocatorRef )NULL,
-                                        kCFNumberSInt32Type,
-                                        &pixelFormat
-                                        );
-    CFTypeRef values[1];
-    values[0] = number;
-    CFDictionaryRef pixelBufferAttributes = CFDictionaryCreate(kCFAllocatorDefault,
-                                                               (const void* []){kCVPixelBufferPixelFormatTypeKey},
-                                                               (const void**) values,
-                                                               1,
-                                                               &kCFTypeDictionaryKeyCallBacks,
-                                                               &kCFTypeDictionaryValueCallBacks);
-    CFRelease(number);
-//    NSDictionary *pixelBufferAttributes = @{
-//                                            (NSString *)kCVPixelBufferPixelFormatTypeKey : @(kCVPixelFormatType_32BGRA)
-//                                            };
-    status = CVPixelBufferCreateWithIOSurface(NULL, surface, pixelBufferAttributes, &screenBuffer);
-    CFRelease(pixelBufferAttributes);
-    CFRelease(surface);
-    if (status != kCVReturnSuccess || !screenBuffer) {
-        return nil;
-    }
-    CVPixelBufferLockBaseAddress(screenBuffer, 0);
-    char *baseAddress = CVPixelBufferGetBaseAddress(screenBuffer);
-    const size_t screenWidth = CVPixelBufferGetWidth(screenBuffer);
-    const size_t screenHeight = CVPixelBufferGetHeight(screenBuffer);
-    const size_t pixelsLength = BYTES_PER_PIXEL * screenWidth * screenHeight;
-    char *pixels = malloc(pixelsLength);
-    memcpy(pixels, baseAddress, pixelsLength);
-    CVPixelBufferUnlockBaseAddress(screenBuffer, 0);
-    CVPixelBufferRelease(screenBuffer);
-    if (dataLength) {
-        *dataLength = pixelsLength;
-    }
-    return pixels;
-}
-
 char *rfbGetRecentFrameData(size_t *dataLength, uint64_t *timestamp) {
-    IOSurfaceRef surface;
-    if (![vncScreenCapture retrieveLastFrame:&surface timestamp:timestamp]) {
+    char *result = nil;
+    if (![vncScreenCapture retrieveLastFrame:&result
+                                  dataLength:dataLength
+                                   timestamp:timestamp]) {
         rfbLog("There was an error getting the screen shot");
         return nil;
     }
-    return extractFrameData(surface, dataLength);
+    return result;
 }
 
 char *rfbGetFramebuffer(size_t *bufferLength) {

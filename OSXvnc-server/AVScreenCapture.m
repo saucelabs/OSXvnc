@@ -16,6 +16,7 @@
 @property (nonatomic) CGDisplayStreamRef displayStream;
 @property (nonatomic, readonly) CGScreenRefreshCallback refreshCallback;
 @property (nonatomic, readonly, copy) NSMutableArray *fifo;
+@property (nonatomic, readonly) CFDictionaryRef pixelBufferAttributes;
 
 @end
 
@@ -29,6 +30,22 @@
         _refreshCallback = refreshCallback;
         _fifo = [[NSMutableArray alloc] init];
         _sampleBufferHolder = [[AVSampleBufferHolder alloc] init];
+
+        int pixelFormat = kCVPixelFormatType_32BGRA;
+        CFNumberRef number = CFNumberCreate(
+                                            ( CFAllocatorRef )NULL,
+                                            kCFNumberSInt32Type,
+                                            &pixelFormat
+                                            );
+        CFTypeRef values[1];
+        values[0] = number;
+        _pixelBufferAttributes = CFDictionaryCreate(kCFAllocatorDefault,
+                                                    (const void* []){kCVPixelBufferPixelFormatTypeKey},
+                                                    (const void**) values,
+                                                    1,
+                                                    &kCFTypeDictionaryKeyCallBacks,
+                                                    &kCFTypeDictionaryValueCallBacks);
+        CFRelease(number);
     }
     return self;
 }
@@ -38,6 +55,8 @@
 
     [_sampleBufferHolder release];
     _sampleBufferHolder = nil;
+
+    CFRelease(_pixelBufferAttributes);
 
     [super dealloc];
 }
@@ -115,23 +134,54 @@
     self.displayStream = nil;
 }
 
-- (BOOL)retrieveLastFrame:(IOSurfaceRef *)surface timestamp:(uint64_t *)timestamp
++ (char *)frameDataWithBuffer:(CVPixelBufferRef)screenBuffer dataLength:(size_t *)dataLength
 {
-    if (nil == self.displayStream || nil == surface) {
+    CVPixelBufferLockBaseAddress(screenBuffer, 0);
+    char *baseAddress = CVPixelBufferGetBaseAddress(screenBuffer);
+    const size_t screenWidth = CVPixelBufferGetWidth(screenBuffer);
+    const size_t screenHeight = CVPixelBufferGetHeight(screenBuffer);
+    const size_t pixelsLength = BYTES_PER_PIXEL * screenWidth * screenHeight;
+    char *pixels = malloc(pixelsLength);
+    memcpy(pixels, baseAddress, pixelsLength);
+    CVPixelBufferUnlockBaseAddress(screenBuffer, 0);
+    if (dataLength) {
+        *dataLength = pixelsLength;
+    }
+    return pixels;
+}
+
+- (BOOL)retrieveLastFrame:(char **)frameData
+               dataLength:(size_t *)dataLength
+                timestamp:(uint64_t *)timestamp
+{
+    if (nil == self.displayStream || nil == frameData) {
         return NO;
     }
 
+    IOSurfaceRef surface = nil;
     @synchronized (self.sampleBufferHolder) {
-        *surface = self.sampleBufferHolder.sampleBuffer;
+        surface = self.sampleBufferHolder.sampleBuffer;
+        if (nil == surface) {
+            return NO;
+        }
+        CFRetain(surface);
+        IOSurfaceIncrementUseCount(surface);
         if (timestamp) {
             *timestamp = self.sampleBufferHolder.timestamp;
         }
     }
-    if (nil == *surface) {
+    CVPixelBufferRef screenBuffer = nil;
+    CVReturn status = CVPixelBufferCreateWithIOSurface(NULL, surface, self.pixelBufferAttributes, &screenBuffer);
+    if (status != kCVReturnSuccess || !screenBuffer) {
+        IOSurfaceDecrementUseCount(surface);
+        CFRelease(surface);
         return NO;
     }
-    CFRetain(*surface);
-    return YES;
+    *frameData = [self.class frameDataWithBuffer:screenBuffer dataLength:dataLength];
+    CVPixelBufferRelease(screenBuffer);
+    IOSurfaceDecrementUseCount(surface);
+    CFRelease(surface);
+    return nil != *frameData;
 }
 
 @end
