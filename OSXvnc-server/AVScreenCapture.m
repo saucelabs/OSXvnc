@@ -14,7 +14,7 @@
 
 @property (nonatomic, retain) AVSampleBufferHolder *sampleBufferHolder;
 @property (nonatomic) CGDisplayStreamRef displayStream;
-@property (nonatomic, readonly, assign) CGScreenRefreshCallback refreshCallback;
+@property (nonatomic, readonly) CGScreenRefreshCallback refreshCallback;
 @property (nonatomic, readonly, copy) NSMutableArray *fifo;
 
 @end
