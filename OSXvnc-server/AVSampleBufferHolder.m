@@ -21,7 +21,6 @@
 
 - (void)dealloc {
     if (nil != _sampleBuffer) {
-        IOSurfaceDecrementUseCount(_sampleBuffer);
         CFRelease(_sampleBuffer);
     }
 
@@ -30,7 +29,6 @@
 
 - (void)setSampleBuffer:(IOSurfaceRef)sampleBuffer {
     if (nil != _sampleBuffer) {
-        IOSurfaceDecrementUseCount(_sampleBuffer);
         CFRelease(_sampleBuffer);
         _sampleBuffer = nil;
     }
@@ -38,7 +36,6 @@
     _sampleBuffer = sampleBuffer;
     if (nil != sampleBuffer) {
         CFRetain(sampleBuffer);
-        IOSurfaceIncrementUseCount(sampleBuffer);
     }
 }
 
