@@ -322,7 +322,6 @@ typedef struct rfbClientRec {
     struct rfbClientRec *prev;
     struct rfbClientRec *next;
 
-    uint64_t previousFramebufferTimestamp;
     uint64_t previousFramebufferDeliveryTimestamp;
 } rfbClientRec, *rfbClientPtr;
 

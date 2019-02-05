@@ -237,7 +237,8 @@ void rfbCheckForCursorChange() {
 	if (lastCursorSeed != currentSeed) {
         // Record first in case another change occurs after notifying clients
         lastCursorSeed = currentSeed;
-		loadCurrentCursorData();
+        // SAUCE: do not show the remote cursor (also crashes randomly)
+        // loadCurrentCursorData();
 		sendNotice = TRUE;
 	}
 	pthread_mutex_unlock(&cursorMutex);

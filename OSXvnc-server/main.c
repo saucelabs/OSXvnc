@@ -400,9 +400,7 @@ static void *clientOutput(void *data) {
             continue;
         }
 
-        if (timestamp == cl->previousFramebufferTimestamp
-            && cl->previousFramebufferDeliveryTimestamp > 0
-            && !cl->immediateUpdate) {
+        if (cl->previousFramebufferDeliveryTimestamp > 0 && !cl->immediateUpdate) {
             // Perform throttling to save the bandwidth
             uint64_t timeElapsed = mach_absolute_time() - cl->previousFramebufferDeliveryTimestamp;
             uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
@@ -423,7 +421,6 @@ static void *clientOutput(void *data) {
         memcpy(cl->screenBuffer, frameData, dataLength);
         free(frameData);
         frameData = nil;
-        cl->previousFramebufferTimestamp = timestamp;
 
         /* Now, get the region we're going to update, and remove
          it from cl->modifiedRegion _before_ we send the update.
