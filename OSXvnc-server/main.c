@@ -979,8 +979,6 @@ static void processArguments(int argc, char *argv[]) {
 void rfbShutdown(void) {
     [[VNCServer sharedServer] rfbShutdown];
 
-//    CGUnregisterScreenRefreshCallback(refreshCallback, NULL);
-    //CGDisplayShowCursor(displayID);
     rfbDimmingShutdown();
 
     rfbDebugLog("Removing Observers");
@@ -1224,16 +1222,11 @@ int main(int argc, char *argv[]) {
             if (!rfbClientsConnected()) {
                 pthread_mutex_lock(&listenerAccepting);
 
-                // You would think that there is no point in getting screen updates with no clients connected
-                // But it seems that unregistering but keeping the process (or event loop) around can cause a stuttering behavior in OS X.
+                rfbLog("Waiting for clients");
                 if (registered && unregisterWhenNoConnections) {
-                    rfbLog("UnRegistering screen update notification - waiting for clients");
-//                    CGUnregisterScreenRefreshCallback(refreshCallback, NULL);
                     [[VNCServer sharedServer] rfbDisconnect];
                     registered = NO;
                 }
-                else
-                    rfbLog("Waiting for clients");
 
                 pthread_cond_wait(&listenerGotNewClient, &listenerAccepting);
                 pthread_mutex_unlock(&listenerAccepting);
