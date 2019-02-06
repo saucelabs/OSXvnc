@@ -405,6 +405,10 @@ static void *clientOutput(void *data) {
             frameData = rfbGetRecentFrameData(&frameDataLength, nil);
         }
         if (nil == frameData || referenceFramebufferLength != frameDataLength) {
+            if (nil != frameData) {
+                free(frameData);
+                frameData = nil;
+            }
             pthread_mutex_unlock(&cl->updateMutex);
             continue;
         }
