@@ -385,23 +385,8 @@ static void *clientOutput(void *data) {
                 pthread_cond_wait(&cl->updateCond, &cl->updateMutex);
         }
 
-        size_t framebufferLength;
-        cl->screenBuffer = rfbGetFramebuffer(&framebufferLength);
-        if (nil == cl->screenBuffer) {
-            pthread_mutex_unlock(&cl->updateMutex);
-            continue;
-        }
-
-        size_t dataLength;
-        uint64_t timestamp;
-        char *frameData = rfbGetRecentFrameData(&dataLength, &timestamp);
-        if (nil == frameData || framebufferLength != dataLength) {
-            pthread_mutex_unlock(&cl->updateMutex);
-            continue;
-        }
-
         if (cl->previousFramebufferDeliveryTimestamp > 0 && !cl->immediateUpdate) {
-            // Perform throttling to save the bandwidth
+            // Perform throttling to save the bandwidth and CPU time
             uint64_t timeElapsed = mach_absolute_time() - cl->previousFramebufferDeliveryTimestamp;
             uint64_t nsElapsed = timeElapsed * timebaseInfo.numer / timebaseInfo.denom;
             int64_t microsecRemainingTillNextFrame = rfbDeferUpdateTime * 1000 - nsElapsed / 1000;
@@ -409,16 +394,21 @@ static void *clientOutput(void *data) {
                 pthread_mutex_unlock(&cl->updateMutex);
                 usleep((useconds_t)microsecRemainingTillNextFrame);
                 pthread_mutex_lock(&cl->updateMutex);
-                free(frameData);
-                frameData = rfbGetRecentFrameData(&dataLength, &timestamp);
-                if (nil == frameData || framebufferLength != dataLength) {
-                    pthread_mutex_unlock(&cl->updateMutex);
-                    continue;
-                }
             }
         }
-
-        memcpy(cl->screenBuffer, frameData, dataLength);
+        
+        size_t referenceFramebufferLength;
+        size_t frameDataLength;
+        char *frameData = nil;
+        cl->screenBuffer = rfbGetFramebuffer(&referenceFramebufferLength);
+        if (cl->screenBuffer) {
+            frameData = rfbGetRecentFrameData(&frameDataLength, nil);
+        }
+        if (nil == frameData || referenceFramebufferLength != frameDataLength) {
+            pthread_mutex_unlock(&cl->updateMutex);
+            continue;
+        }
+        memcpy(cl->screenBuffer, frameData, frameDataLength);
         free(frameData);
         frameData = nil;
 
