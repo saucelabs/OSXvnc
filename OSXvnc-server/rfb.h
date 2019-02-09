@@ -321,6 +321,8 @@ typedef struct rfbClientRec {
 
     struct rfbClientRec *prev;
     struct rfbClientRec *next;
+
+    uint64_t previousFramebufferDeliveryTimestamp;
 } rfbClientRec, *rfbClientPtr;
 
 
@@ -372,8 +374,8 @@ extern unsigned rfbProtocolMinorVersion;
 
 extern unsigned rfbPort;
 
-extern char *rfbGetFramebuffer(void);
-extern void rfbGetFramebufferUpdateInRect(int x, int y, int w, int h);
+extern char *rfbGetFramebuffer(size_t *bufferLength);
+extern char *rfbGetRecentFrameData(size_t *dataLength, uint64_t *timestamp);
 
 extern void rfbStartClientWithFD(int client_fd);
 extern void connectReverseClient(char *hostName, int portNum);

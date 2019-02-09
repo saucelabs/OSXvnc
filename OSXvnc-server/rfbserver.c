@@ -111,7 +111,6 @@ void rfbSendClientList() {
                                                                     object:[NSString stringWithFormat:@"OSXvnc%d",rfbPort]
                                                                   userInfo:@{@"clientList": clientList}];
 
-    [clientList dealloc];
     [pool release];
 
     pthread_mutex_unlock(&rfbClientListMutex);
@@ -274,6 +273,8 @@ rfbClientPtr rfbNewClient(int sock) {
     for (i = 0; i < 256; i++)
         cl->modiferKeys[i] = 0;
 
+    cl->previousFramebufferDeliveryTimestamp = 0;
+
     box.x1 = box.y1 = 0;
     box.x2 = rfbScreen.width;
     box.y2 = rfbScreen.height;
@@ -312,7 +313,7 @@ rfbClientPtr rfbNewClient(int sock) {
 
     /* SERVER SCALING EXTENSIONS -- Server Scaling is off by default */
     cl->scalingFactor = 1;
-    cl->screenBuffer = rfbGetFramebuffer();
+    cl->screenBuffer = rfbGetFramebuffer(nil);
     cl->scalingFrameBuffer = cl->screenBuffer;
     cl->scalingPaddedWidthInBytes = rfbScreen.paddedWidthInBytes;
 
@@ -941,7 +942,7 @@ void rfbProcessClientNormalMessage(rfbClientPtr cl) {
                 }
                 else {
                     cl->scalingFrameBuffer = malloc( csw*csh*rfbScreen.bitsPerPixel/8 );
-                    cl->scalingPaddedWidthInBytes = csw * rfbScreen.bitsPerPixel/8;
+                    cl->scalingPaddedWidthInBytes = (int) (csw * rfbScreen.bitsPerPixel/8);
                 }
 
                 /* Now notify the client of the new desktop area */
@@ -1042,7 +1043,7 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl, RegionRec updateRegion) {
             nUpdateRegionRects += n;
         }
     } else {
-        nUpdateRegionRects = REGION_NUM_RECTS(&updateRegion);
+        nUpdateRegionRects = (uint32_t) REGION_NUM_RECTS(&updateRegion);
     }
 
     // Sometimes send the mouse cursor update also
@@ -1091,16 +1092,11 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl, RegionRec updateRegion) {
         }
     }
 
-    cl->screenBuffer = rfbGetFramebuffer();
-
     for (i = 0; i < REGION_NUM_RECTS(&updateRegion); i++) {
         uint32_t x = REGION_RECTS(&updateRegion)[i].x1;
         uint32_t y = REGION_RECTS(&updateRegion)[i].y1;
         uint32_t w = REGION_RECTS(&updateRegion)[i].x2 - x;
         uint32_t h = REGION_RECTS(&updateRegion)[i].y2 - y;
-
-        rfbGetFramebufferUpdateInRect(x,y,w,h);
-
 
         // Refresh with latest pointer (should be "read-locked" throughout here with CG but I don't see that option)
         if (cl->scalingFactor != 1)

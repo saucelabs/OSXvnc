@@ -22,6 +22,12 @@
 /* End PBXAggregateTarget section */
 
 /* Begin PBXBuildFile section */
+		13F8D24121ECDB1F007A9209 /* AVScreenCapture.m in Sources */ = {isa = PBXBuildFile; fileRef = 13F8D24021ECDB1F007A9209 /* AVScreenCapture.m */; };
+		713DBE9321F36C3300CC2EC3 /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 713DBE9221F36C3300CC2EC3 /* CoreMedia.framework */; };
+		71DD0BC52206F63E0091B9FF /* IOSurface.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71DD0BC42206F63E0091B9FF /* IOSurface.framework */; };
+		71FB44E421F343D100061CBA /* AVSampleBufferHolder.m in Sources */ = {isa = PBXBuildFile; fileRef = 71FB44E321F343D100061CBA /* AVSampleBufferHolder.m */; };
+		71FB44E621F35D1D00061CBA /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71FB44E521F35D1D00061CBA /* AVFoundation.framework */; };
+		71FB44E821F35DCF00061CBA /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 71FB44E721F35DCF00061CBA /* CoreVideo.framework */; };
 		9199995B0B1135FF0099EA7A /* getMACAddress.c in Sources */ = {isa = PBXBuildFile; fileRef = 919999430B11348E0099EA7A /* getMACAddress.c */; };
 		AB25D81F08686B520065843D /* Credits.rtf in Resources */ = {isa = PBXBuildFile; fileRef = F57BB467027E036F014B5D3F /* Credits.rtf */; };
 		AB25D82008686B520065843D /* Vine Server Release Notes.rtf in Resources */ = {isa = PBXBuildFile; fileRef = AB541C2907A0264F00B63668 /* Vine Server Release Notes.rtf */; };
@@ -139,7 +145,15 @@
 /* Begin PBXFileReference section */
 		096B69DC0097995A7F000001 /* OSXvnc.html */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = text.html; path = OSXvnc.html; sourceTree = "<group>"; };
 		1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = /System/Library/Frameworks/Cocoa.framework; sourceTree = "<absolute>"; };
+		13F8D23F21ECDB1F007A9209 /* AVScreenCapture.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AVScreenCapture.h; sourceTree = "<group>"; };
+		13F8D24021ECDB1F007A9209 /* AVScreenCapture.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AVScreenCapture.m; sourceTree = "<group>"; };
 		29B97316FDCFA39411CA2CEA /* main.m */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
+		713DBE9221F36C3300CC2EC3 /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
+		71DD0BC42206F63E0091B9FF /* IOSurface.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOSurface.framework; path = System/Library/Frameworks/IOSurface.framework; sourceTree = SDKROOT; };
+		71FB44E221F343D100061CBA /* AVSampleBufferHolder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = AVSampleBufferHolder.h; sourceTree = "<group>"; };
+		71FB44E321F343D100061CBA /* AVSampleBufferHolder.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AVSampleBufferHolder.m; sourceTree = "<group>"; };
+		71FB44E521F35D1D00061CBA /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		71FB44E721F35DCF00061CBA /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
 		919999420B11348C0099EA7A /* getMACAddress.h */ = {isa = PBXFileReference; fileEncoding = 30; lastKnownFileType = sourcecode.c.h; path = getMACAddress.h; sourceTree = "<group>"; };
 		919999430B11348E0099EA7A /* getMACAddress.c */ = {isa = PBXFileReference; explicitFileType = sourcecode.c.objc; fileEncoding = 30; path = getMACAddress.c; sourceTree = "<group>"; };
 		AB25D83708686B520065843D /* VineServer-Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = "VineServer-Info.plist"; sourceTree = "<group>"; };
@@ -275,6 +289,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				71DD0BC52206F63E0091B9FF /* IOSurface.framework in Frameworks */,
+				713DBE9321F36C3300CC2EC3 /* CoreMedia.framework in Frameworks */,
+				71FB44E821F35DCF00061CBA /* CoreVideo.framework in Frameworks */,
+				71FB44E621F35D1D00061CBA /* AVFoundation.framework in Frameworks */,
 				AB25D8AC0868707C0065843D /* Carbon.framework in Frameworks */,
 				AB25D9400868707E0065843D /* Cocoa.framework in Frameworks */,
 				AB25DA3B0868842E0065843D /* IOKit.framework in Frameworks */,
@@ -339,6 +357,10 @@
 		29B97323FDCFA39411CA2CEA /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				71DD0BC42206F63E0091B9FF /* IOSurface.framework */,
+				713DBE9221F36C3300CC2EC3 /* CoreMedia.framework */,
+				71FB44E721F35DCF00061CBA /* CoreVideo.framework */,
+				71FB44E521F35D1D00061CBA /* AVFoundation.framework */,
 				AB25DA3C086884420065843D /* libz.dylib */,
 				AB25DA3A0868842E0065843D /* IOKit.framework */,
 				ABF191B704E447A400A80117 /* Carbon.framework */,
@@ -369,6 +391,10 @@
 			isa = PBXGroup;
 			children = (
 				F538E10F02F9812C01A80186 /* Makefile */,
+				71FB44E221F343D100061CBA /* AVSampleBufferHolder.h */,
+				71FB44E321F343D100061CBA /* AVSampleBufferHolder.m */,
+				13F8D23F21ECDB1F007A9209 /* AVScreenCapture.h */,
+				13F8D24021ECDB1F007A9209 /* AVScreenCapture.m */,
 				F58DDDE7056A861001A8015E /* VNCServer.h */,
 				F58DDDE8056A861001A8015E /* VNCServer.m */,
 				ABA7B3D10948CB5D00CD7499 /* d3des.c */,
@@ -699,10 +725,12 @@
 				AB25D8A20868704E0065843D /* sockets.c in Sources */,
 				AB25D8A30868704F0065843D /* stats.c in Sources */,
 				AB25D8A5086870530065843D /* tight.c in Sources */,
+				13F8D24121ECDB1F007A9209 /* AVScreenCapture.m in Sources */,
 				AB25D8A6086870540065843D /* translate.c in Sources */,
 				AB25D8A7086870540065843D /* xalloc.c in Sources */,
 				AB25D8A8086870550065843D /* zlib.c in Sources */,
 				AB25D8A9086870550065843D /* zlibhex.c in Sources */,
+				71FB44E421F343D100061CBA /* AVSampleBufferHolder.m in Sources */,
 				AB25D8AA086870560065843D /* zrle.cc in Sources */,
 				ABA7B3D60948CB5D00CD7499 /* d3des.c in Sources */,
 				ABA7B3D70948CB5D00CD7499 /* vncauth.c in Sources */,
@@ -815,6 +843,8 @@
 				CODE_SIGN_IDENTITY = "";
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
+				HEADER_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "";
 				PRODUCT_NAME = "Vine Server Package";
 				SDKROOT = macosx;
 			};
@@ -826,6 +856,8 @@
 				CODE_SIGN_IDENTITY = "";
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				GCC_ENABLE_FIX_AND_CONTINUE = NO;
+				HEADER_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "";
 				PRODUCT_NAME = "Vine Server Package";
 				SDKROOT = macosx;
 			};
@@ -970,7 +1002,9 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = "";
 				INSTALL_PATH = "";
+				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
@@ -1009,7 +1043,9 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = "";
 				INSTALL_PATH = "";
+				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				SDKROOT = macosx;
 				STRIP_INSTALLED_PRODUCT = NO;

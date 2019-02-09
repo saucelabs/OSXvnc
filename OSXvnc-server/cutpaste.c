@@ -513,7 +513,7 @@ void rfbCheckForPasteboardChange() {
 		rfbClientIteratorPtr iterator = rfbGetClientIterator();
 
 		// Let's grab a copy of it here in the Main/Event Thread so that the output threads don't have to deal with the PB directly
-		if ([[NSPasteboard generalPasteboard] availableTypeFromArray:@[NSStringPboardType]]) {
+		if ([[NSPasteboard generalPasteboard].types containsObject:NSStringPboardType]) {
 			[pasteboardVariablesLock lock];
 			// Record first in case another event comes in after notifying clients
 			generalPBLastChangeCount = (int)[NSPasteboard generalPasteboard].changeCount;
