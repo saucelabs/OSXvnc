@@ -1,5 +1,7 @@
 #!/bin/bash
 
+BLOCKS_COUNT=3
+
 function join { local IFS="$1"; shift; echo "$*"; }
 
 block_idx=-1
@@ -22,11 +24,14 @@ esac
 
 current_version=`cat Version.txt`
 IFS='.' read -r -a blocks <<< "$current_version"
-if [ ${#blocks[@]} -ne 3 ]; then
-    echo "The current application version '$current_version' must include three blocks of numbers"
+if [ ${#blocks[@]} -ne $BLOCKS_COUNT ]; then
+    echo "The current application version '$current_version' must include $BLOCKS_COUNT blocks of numbers"
     exit 1
 fi
 (( blocks[$block_idx]++ ))
+for (( idx=block_idx+1; idx<$BLOCKS_COUNT; idx++ )); do
+    blocks[$idx]=0
+done
 
 new_version=$(join . ${blocks[@]})
 echo "The updated version number: $new_version"
