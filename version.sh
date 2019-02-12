@@ -36,4 +36,5 @@ done
 new_version=$(join . ${blocks[@]})
 echo "The updated version number: $new_version"
 echo "$new_version" > Version.txt
+git commit -m "Update to version $new_version"
 git tag "v.$new_version"
