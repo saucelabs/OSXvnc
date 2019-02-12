@@ -1,6 +1,7 @@
 #!/bin/bash
 
 BLOCKS_COUNT=3
+VERSION_FILE="Version.txt"
 
 function join { local IFS="$1"; shift; echo "$*"; }
 
@@ -22,7 +23,7 @@ case "$1" in
     ;;
 esac
 
-current_version=`cat Version.txt`
+current_version=`cat "$VERSION_FILE"`
 IFS='.' read -r -a blocks <<< "$current_version"
 if [ ${#blocks[@]} -ne $BLOCKS_COUNT ]; then
     echo "The current application version '$current_version' must include $BLOCKS_COUNT blocks of numbers"
@@ -35,6 +36,7 @@ done
 
 new_version=$(join . ${blocks[@]})
 echo "The updated version number: $new_version"
-echo "$new_version" > Version.txt
+echo "$new_version" > "$VERSION_FILE"
+git add "$VERSION_FILE"
 git commit -m "Update to version $new_version"
 git tag "v.$new_version"
