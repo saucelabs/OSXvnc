@@ -57,6 +57,16 @@ Run this command from the command line:
 
 Again you will find the distributable at /tmp/VineServer.dmg
 
+### Bumping the version number
+
+Run `./version.sh` script from the command line with one of the possible arguments:
+
+- `major`
+- `minor`
+- `patch`
+
+to bump the OSXVnc version number. The script will also add the corresponding tag to Git.
+
 License
 -------
 
