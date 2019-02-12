@@ -29,7 +29,7 @@ if [ ${#blocks[@]} -ne $BLOCKS_COUNT ]; then
     exit 1
 fi
 (( blocks[$block_idx]++ ))
-for (( idx=block_idx+1; idx<$BLOCKS_COUNT; idx++ )); do
+for (( idx=$block_idx+1; idx<$BLOCKS_COUNT; idx++ )); do
     blocks[$idx]=0
 done
 
