@@ -44,6 +44,7 @@
 //#include <ApplicationServices/ApplicationServices.h>
 
 #include "CoreGraphics/CGGeometry.h"
+#include "CoreGraphics/CGDirectDisplay.h"
 
 #define MAX_ENCODINGS 17
 
