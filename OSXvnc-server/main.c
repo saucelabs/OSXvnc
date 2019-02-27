@@ -1212,10 +1212,10 @@ int main(int argc, char *argv[]) {
             if (rfbClientsConnected()) {
                 // SAUCE: The cursor is automatically restored if moved over the Dock
                 // Make sure it is hidden on each event loop
-                rfbSetCursorVisibility(FALSE);
+                rfbSetCursorVisibility(FALSE, displayID);
             } else {
                 // Show the cursor back if no clients are connected
-                rfbSetCursorVisibility(TRUE);
+                rfbSetCursorVisibility(TRUE, displayID);
                 // No Clients - go into hibernation
                 pthread_mutex_lock(&listenerAccepting);
 

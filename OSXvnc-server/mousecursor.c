@@ -68,14 +68,14 @@ CGPoint currentCursorLoc() {
     return cursorLoc;
 }
 
-void setCursorVisibility(Bool isVisible) {
+void setCursorVisibility(Bool isVisible, CGDirectDisplayID displayID) {
     CFStringRef propertyString = CFStringCreateWithCString(NULL, "SetsCursorInBackground", kCFStringEncodingUTF8);
     CGSSetConnectionProperty(_CGSDefaultConnection(), _CGSDefaultConnection(), propertyString, isVisible ? kCFBooleanFalse : kCFBooleanTrue);
     CFRelease(propertyString);
     if (isVisible) {
-        CGDisplayShowCursor(kCGDirectMainDisplay);
+        CGDisplayShowCursor(displayID);
     } else {
-        CGDisplayHideCursor(kCGDirectMainDisplay);
+        CGDisplayHideCursor(displayID);
     }
 }
 
@@ -111,8 +111,8 @@ void loadCurrentCursorData() {
     //CGSReleaseConnection(connection);
     if (err != kCGErrorSuccess) {
         // `free` is most likely called automatically if an error happens
-		// free(cursorData);
-		cursorData = NULL;
+        // free(cursorData);
+        cursorData = NULL;
         rfbLog("Error obtaining cursor data - cursor not sent");
         return;
     }
@@ -130,7 +130,7 @@ void loadCurrentCursorData() {
     cursorMaskSize = floor((cursorRect.size.width+7)/8) * cursorRect.size.height;
 
     if (cursorMaskData) {
-		free(cursorMaskData);
+        free(cursorMaskData);
         cursorMaskData = NULL;
     }
 	cursorMaskData = (unsigned char*)malloc(sizeof(unsigned char) * cursorMaskSize);
@@ -282,8 +282,8 @@ Bool rfbShouldSendNewCursor(rfbClientPtr cl) {
         return (cl->currentCursorSeed != lastCursorSeed);
 }
 
-void rfbSetCursorVisibility(Bool isVisible) {
-    setCursorVisibility(isVisible);
+void rfbSetCursorVisibility(Bool isVisible, CGDirectDisplayID displayID) {
+    setCursorVisibility(isVisible, displayID);
 }
 
 Bool rfbShouldSendNewPosition(rfbClientPtr cl) {
