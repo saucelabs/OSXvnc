@@ -1209,8 +1209,14 @@ int main(int argc, char *argv[]) {
         OSStatus resultCode = 0;
 
         while (keepRunning) {
-            // No Clients - go into hibernation
-            if (!rfbClientsConnected()) {
+            if (rfbClientsConnected()) {
+                // SAUCE: The cursor is automatically restored if moved over the Dock
+                // Make sure it is hidden on each event loop
+                rfbSetCursorVisibility(FALSE);
+            } else {
+                // Show the cursor back if no clients are connected
+                rfbSetCursorVisibility(TRUE);
+                // No Clients - go into hibernation
                 pthread_mutex_lock(&listenerAccepting);
 
                 rfbLog("Waiting for clients");

@@ -615,6 +615,7 @@ extern void GetCursorInfo(void);
 extern void rfbCheckForCursorChange(void);
 extern Bool rfbShouldSendNewCursor(rfbClientPtr cl);
 extern Bool rfbShouldSendNewPosition(rfbClientPtr cl);
+extern void rfbSetCursorVisibility(Bool isVisible);
 
 extern Bool rfbSendRichCursorUpdate(rfbClientPtr cl);
 extern Bool rfbSendCursorPos(rfbClientPtr cl);

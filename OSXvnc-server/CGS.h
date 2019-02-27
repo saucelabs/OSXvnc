@@ -15,6 +15,7 @@ typedef int CGSConnectionRef;
 
 extern CGError CGSNewConnection(void* unknown, CGSConnectionRef* newConnection);
 extern CGError CGSReleaseConnection(CGSConnectionRef connection);
+extern void CGSSetConnectionProperty(int conn, int conn2, CFStringRef propertyName, CFBooleanRef propertyValue);
 
 extern CGError CGSGetGlobalCursorDataSize(CGSConnectionRef connection, int* size);
 extern CGError CGSGetGlobalCursorData(CGSConnectionRef connection,
@@ -26,6 +27,8 @@ extern CGError CGSGetGlobalCursorData(CGSConnectionRef connection,
                                       int* depth,
                                       int* components,
                                       int* bitsPerComponent);
+
+extern int _CGSDefaultConnection(void);
 
 extern CGError CGSGetCurrentCursorLocation(CGSConnectionRef connection, CGPoint* point);
 extern int CGSCurrentCursorSeed(void);

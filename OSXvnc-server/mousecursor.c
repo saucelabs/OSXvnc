@@ -68,6 +68,17 @@ CGPoint currentCursorLoc() {
     return cursorLoc;
 }
 
+void setCursorVisibility(Bool isVisible) {
+    CFStringRef propertyString = CFStringCreateWithCString(NULL, "SetsCursorInBackground", kCFStringEncodingUTF8);
+    CGSSetConnectionProperty(_CGSDefaultConnection(), _CGSDefaultConnection(), propertyString, isVisible ? kCFBooleanFalse : kCFBooleanTrue);
+    CFRelease(propertyString);
+    if (isVisible) {
+        CGDisplayShowCursor(kCGDirectMainDisplay);
+    } else {
+        CGDisplayHideCursor(kCGDirectMainDisplay);
+    }
+}
+
 void loadCurrentCursorData() {
     CGError err;
     CGSConnectionRef connection = getConnection();
@@ -82,8 +93,10 @@ void loadCurrentCursorData() {
         return;
     }
 
-	if (cursorData)
+    if (cursorData) {
 		free(cursorData);
+        cursorData = NULL;
+    }
     cursorData = (unsigned char*)malloc(sizeof(unsigned char) * cursorDataSize);
     err = CGSGetGlobalCursorData(connection,
                                  cursorData,
@@ -97,7 +110,8 @@ void loadCurrentCursorData() {
 
     //CGSReleaseConnection(connection);
     if (err != kCGErrorSuccess) {
-		free(cursorData);
+        // `free` is most likely called automatically if an error happens
+		// free(cursorData);
 		cursorData = NULL;
         rfbLog("Error obtaining cursor data - cursor not sent");
         return;
@@ -115,8 +129,10 @@ void loadCurrentCursorData() {
 
     cursorMaskSize = floor((cursorRect.size.width+7)/8) * cursorRect.size.height;
 
-	if (cursorMaskData)
+    if (cursorMaskData) {
 		free(cursorMaskData);
+        cursorMaskData = NULL;
+    }
 	cursorMaskData = (unsigned char*)malloc(sizeof(unsigned char) * cursorMaskSize);
 
 	// Apple Cursors can use a full Alpha channel.
@@ -237,8 +253,7 @@ void rfbCheckForCursorChange() {
 	if (lastCursorSeed != currentSeed) {
         // Record first in case another change occurs after notifying clients
         lastCursorSeed = currentSeed;
-        // SAUCE: do not show the remote cursor (also crashes randomly)
-        // loadCurrentCursorData();
+        loadCurrentCursorData();
 		sendNotice = TRUE;
 	}
 	pthread_mutex_unlock(&cursorMutex);
@@ -265,6 +280,10 @@ Bool rfbShouldSendNewCursor(rfbClientPtr cl) {
         return FALSE;
     else
         return (cl->currentCursorSeed != lastCursorSeed);
+}
+
+void rfbSetCursorVisibility(Bool isVisible) {
+    setCursorVisibility(isVisible);
 }
 
 Bool rfbShouldSendNewPosition(rfbClientPtr cl) {
