@@ -193,7 +193,7 @@
         return 0;
     }
     
-    size_t secondsElapsed = 0;
+    NSTimeInterval secondsElapsed = 0.0;
     IOSurfaceRef surface = nil;
     do {
         @synchronized (self.sampleBufferHolder) {
@@ -205,7 +205,7 @@
             }
         }
         RunCurrentEventLoop(kEventDurationSecond);
-        secondsElapsed++;
+        secondsElapsed += kEventDurationSecond;
     } while (secondsElapsed < timeout + DBL_EPSILON);
     if (nil == surface) {
         return 0;
