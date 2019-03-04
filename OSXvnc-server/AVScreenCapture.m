@@ -8,6 +8,7 @@
 
 #import "AVScreenCapture.h"
 
+#include <Carbon/Carbon.h>
 #import "AVSampleBufferHolder.h"
 
 @interface AVScreenCapture() <AVCaptureVideoDataOutputSampleBufferDelegate>
@@ -134,13 +135,14 @@
     self.displayStream = nil;
 }
 
-+ (char *)frameDataWithBuffer:(CVPixelBufferRef)screenBuffer dataLength:(size_t *)dataLength
++ (char *)frameDataWithBuffer:(CVPixelBufferRef)screenBuffer
+                   dataLength:(size_t *)dataLength
 {
     CVPixelBufferLockBaseAddress(screenBuffer, 0);
     char *baseAddress = CVPixelBufferGetBaseAddress(screenBuffer);
-    const size_t screenWidth = CVPixelBufferGetWidth(screenBuffer);
     const size_t screenHeight = CVPixelBufferGetHeight(screenBuffer);
-    const size_t pixelsLength = BYTES_PER_PIXEL * screenWidth * screenHeight;
+    const size_t bytesPerRow = CVPixelBufferGetBytesPerRow(screenBuffer);
+    const size_t pixelsLength = bytesPerRow * screenHeight;
     char *pixels = malloc(pixelsLength);
     memcpy(pixels, baseAddress, pixelsLength);
     CVPixelBufferUnlockBaseAddress(screenBuffer, 0);
@@ -177,11 +179,51 @@
         CFRelease(surface);
         return NO;
     }
-    *frameData = [self.class frameDataWithBuffer:screenBuffer dataLength:dataLength];
+    *frameData = [self.class frameDataWithBuffer:screenBuffer
+                                      dataLength:dataLength];
     CVPixelBufferRelease(screenBuffer);
     IOSurfaceDecrementUseCount(surface);
     CFRelease(surface);
     return nil != *frameData;
+}
+
+- (size_t)paddedScreenWidthWithTimeout:(NSTimeInterval)timeout
+{
+    if (nil == self.displayStream) {
+        return 0;
+    }
+    
+    size_t secondsElapsed = 0;
+    IOSurfaceRef surface = nil;
+    do {
+        @synchronized (self.sampleBufferHolder) {
+            surface = self.sampleBufferHolder.sampleBuffer;
+            if (nil != surface) {
+                CFRetain(surface);
+                IOSurfaceIncrementUseCount(surface);
+                break;
+            }
+        }
+        RunCurrentEventLoop(kEventDurationSecond);
+        secondsElapsed++;
+    } while (secondsElapsed < timeout + DBL_EPSILON);
+    if (nil == surface) {
+        return 0;
+    }
+
+    CVPixelBufferRef screenBuffer = nil;
+    CVReturn status = CVPixelBufferCreateWithIOSurface(NULL, surface, self.pixelBufferAttributes, &screenBuffer);
+    if (status != kCVReturnSuccess || !screenBuffer) {
+        IOSurfaceDecrementUseCount(surface);
+        CFRelease(surface);
+        return 0;
+    }
+    
+    const size_t bytesPerRow = CVPixelBufferGetBytesPerRow(screenBuffer);
+    CVPixelBufferRelease(screenBuffer);
+    IOSurfaceDecrementUseCount(surface);
+    CFRelease(surface);
+    return bytesPerRow;
 }
 
 @end
