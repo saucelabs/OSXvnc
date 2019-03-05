@@ -8,7 +8,6 @@
 
 #import "AVScreenCapture.h"
 
-#include <Carbon/Carbon.h>
 #import "AVSampleBufferHolder.h"
 
 @interface AVScreenCapture() <AVCaptureVideoDataOutputSampleBufferDelegate>
@@ -18,6 +17,7 @@
 @property (nonatomic, readonly) CGScreenRefreshCallback refreshCallback;
 @property (nonatomic, readonly, copy) NSMutableArray *fifo;
 @property (nonatomic, readonly) CFDictionaryRef pixelBufferAttributes;
+@property (nonatomic) BOOL invokeRefreshCallback;
 
 @end
 
@@ -31,6 +31,7 @@
         _refreshCallback = refreshCallback;
         _fifo = [[NSMutableArray alloc] init];
         _sampleBufferHolder = [[AVSampleBufferHolder alloc] init];
+        _invokeRefreshCallback = YES;
 
         int pixelFormat = kCVPixelFormatType_32BGRA;
         CFNumberRef number = CFNumberCreate(
@@ -94,7 +95,7 @@
         }
         size_t count = 0;
         const CGRect* rects = CGDisplayStreamUpdateGetRects(updateRef, kCGDisplayStreamUpdateDirtyRects, &count);
-        if (count > 0) {
+        if (self.invokeRefreshCallback && count > 0) {
             self.refreshCallback((uint32_t)count, rects, nil);
         }
     };
@@ -194,8 +195,18 @@
     }
     
     NSTimeInterval secondsElapsed = 0.0;
+    NSTimeInterval interval = 0.3;
     IOSurfaceRef surface = nil;
+    // Make sure we get the metrics from the upcoming screen buffer
+    @synchronized (self.sampleBufferHolder) {
+        self.sampleBufferHolder.sampleBuffer = nil;
+        self.sampleBufferHolder.timestamp = 0;
+    }
+    self.invokeRefreshCallback = NO;
     do {
+        NSDate *timeoutDate = [NSDate dateWithTimeIntervalSinceNow:interval];
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:timeoutDate];
+        secondsElapsed += interval;
         @synchronized (self.sampleBufferHolder) {
             surface = self.sampleBufferHolder.sampleBuffer;
             if (nil != surface) {
@@ -204,9 +215,8 @@
                 break;
             }
         }
-        RunCurrentEventLoop(kEventDurationSecond);
-        secondsElapsed += kEventDurationSecond;
     } while (secondsElapsed < timeout + DBL_EPSILON);
+    self.invokeRefreshCallback = YES;
     if (nil == surface) {
         return 0;
     }
@@ -218,7 +228,7 @@
         CFRelease(surface);
         return 0;
     }
-    
+
     const size_t bytesPerRow = CVPixelBufferGetBytesPerRow(screenBuffer);
     CVPixelBufferRelease(screenBuffer);
     IOSurfaceDecrementUseCount(surface);
