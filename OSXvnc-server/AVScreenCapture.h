@@ -25,6 +25,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (BOOL)retrieveLastFrame:(char **)frameData
                dataLength:(nullable size_t *)dataLength
                 timestamp:(nullable uint64_t *)timestamp;
+- (size_t)paddedScreenWidthWithTimeout:(NSTimeInterval)timeout;
 - (void)stop;
 
 @end

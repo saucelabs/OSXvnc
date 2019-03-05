@@ -660,7 +660,6 @@ static bool rfbScreenInit(void) {
     rfbScreen.height = (int) CGDisplayPixelsHigh(displayID);
     rfbScreen.bitsPerPixel = bitsPerPixelForDisplay(displayID);
     rfbScreen.depth = samplesPerPixel * bitsPerSample;
-    rfbScreen.paddedWidthInBytes = (int) (rfbScreen.width * BYTES_PER_PIXEL);
 
     if (nil != vncScreenCapture) {
         [vncScreenCapture stop];
@@ -674,6 +673,14 @@ static bool rfbScreenInit(void) {
 
     if (floor(NSAppKitVersionNumber) <= floor(NSAppKitVersionNumber10_6)) {
         rfbScreen.paddedWidthInBytes = (int) CGDisplayBytesPerRow(displayID);
+    } else {
+        size_t paddedWidthInBytes = [vncScreenCapture paddedScreenWidthWithTimeout:3];
+        if (0 == paddedWidthInBytes) {
+            rfbLog("Could not retrieve padded screen width");
+            rfbScreen.paddedWidthInBytes = BYTES_PER_PIXEL * rfbScreen.width;
+        } else {
+            rfbScreen.paddedWidthInBytes = (int) paddedWidthInBytes;
+        }
     }
     rfbServerFormat.bitsPerPixel = rfbScreen.bitsPerPixel;
     rfbServerFormat.depth = rfbScreen.depth;
