@@ -1221,12 +1221,12 @@ int main(int argc, char *argv[]) {
             if (rfbClientsConnected()) {
                 // SAUCE: The cursor is automatically restored if moved over the Dock
                 // Make sure it is hidden every `cursorVisibilityRefreshInterval` seconds
-                Bool shouldSyncCursorVisibilty = 0 == lastCursorVisibilitySync;
+                Bool shouldSyncCursorVisibility = 0 == lastCursorVisibilitySync;
                 if (lastCursorVisibilitySync > 0) {
                     uint64_t nsElapsed = (mach_absolute_time() - lastCursorVisibilitySync) * timebaseInfo.numer / timebaseInfo.denom;
-                    shouldSyncCursorVisibilty = 1.0 * nsElapsed / NSEC_PER_SEC >= cursorVisibilityRefreshInterval;
+                    shouldSyncCursorVisibility = 1.0 * nsElapsed / NSEC_PER_SEC >= cursorVisibilityRefreshInterval;
                 }
-                if (shouldSyncCursorVisibilty) {
+                if (shouldSyncCursorVisibility) {
                     rfbSetCursorVisibility(FALSE);
                     lastCursorVisibilitySync = mach_absolute_time();
                 }
