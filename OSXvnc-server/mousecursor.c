@@ -68,7 +68,7 @@ CGPoint currentCursorLoc() {
     return cursorLoc;
 }
 
-void setCursorVisibility(Bool isVisible, CGDirectDisplayID displayID) {
+void setCursorVisibility(Bool isVisible) {
     CFStringRef propertyString = CFStringCreateWithCString(NULL, "SetsCursorInBackground", kCFStringEncodingUTF8);
     CGSSetConnectionProperty(_CGSDefaultConnection(), _CGSDefaultConnection(), propertyString, isVisible ? kCFBooleanFalse : kCFBooleanTrue);
     CFRelease(propertyString);
@@ -77,6 +77,7 @@ void setCursorVisibility(Bool isVisible, CGDirectDisplayID displayID) {
     } else {
         CGDisplayHideCursor(displayID);
     }
+
 }
 
 void loadCurrentCursorData() {
@@ -282,8 +283,8 @@ Bool rfbShouldSendNewCursor(rfbClientPtr cl) {
         return (cl->currentCursorSeed != lastCursorSeed);
 }
 
-void rfbSetCursorVisibility(Bool isVisible, CGDirectDisplayID displayID) {
-    setCursorVisibility(isVisible, displayID);
+void rfbSetCursorVisibility(Bool isVisible) {
+    setCursorVisibility(isVisible);
 }
 
 Bool rfbShouldSendNewPosition(rfbClientPtr cl) {
