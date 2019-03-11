@@ -73,11 +73,10 @@ void setCursorVisibility(Bool isVisible) {
     CGSSetConnectionProperty(_CGSDefaultConnection(), _CGSDefaultConnection(), propertyString, isVisible ? kCFBooleanFalse : kCFBooleanTrue);
     CFRelease(propertyString);
     if (isVisible) {
-        CGDisplayShowCursor(displayID);
+        CGDisplayShowCursor(0);
     } else {
-        CGDisplayHideCursor(displayID);
+        CGDisplayHideCursor(0);
     }
-
 }
 
 void loadCurrentCursorData() {
