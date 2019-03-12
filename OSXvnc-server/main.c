@@ -1101,10 +1101,7 @@ BOOL runningLittleEndian ( void ) {
 
 int main(int argc, char *argv[]) {
     NSAutoreleasePool *tempPool = [[NSAutoreleasePool alloc] init];
-    static dispatch_once_t onceStreamingInit;
-    dispatch_once(&onceStreamingInit, ^{
-        mach_timebase_info(&timebaseInfo);
-    });
+    mach_timebase_info(&timebaseInfo);
     vncServerObject = [[VNCServer alloc] init];
     littleEndian = runningLittleEndian();
     checkForUsage(argc,argv);
