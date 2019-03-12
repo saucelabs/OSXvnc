@@ -243,35 +243,30 @@ void GetCursorInfo() {
 // We call this to see if we have a new cursor and should notify clients to do an update
 // Or if cursor has moved
 void rfbCheckForCursorChange() {
-	Bool sendNotice = FALSE;
     CGPoint cursorLoc = currentCursorLoc();
 	int currentSeed = CGSCurrentCursorSeed();
 
 	pthread_mutex_lock(&cursorMutex);
 	if (!CGPointEqualToPoint(lastCursorPosition, cursorLoc)) {
 		lastCursorPosition = cursorLoc;
-		sendNotice = TRUE;
 	}
 	if (lastCursorSeed != currentSeed) {
         // Record first in case another change occurs after notifying clients
         lastCursorSeed = currentSeed;
         loadCurrentCursorData();
-		sendNotice = TRUE;
 	}
 	pthread_mutex_unlock(&cursorMutex);
 
     //rfbLog("Check For Cursor Change");
-    if (sendNotice) {
-        rfbClientIteratorPtr iterator = rfbGetClientIterator();
-        rfbClientPtr cl;
+    rfbClientIteratorPtr iterator = rfbGetClientIterator();
+    rfbClientPtr cl;
 
-        // Notify each client
-        while ((cl = rfbClientIteratorNext(iterator)) != NULL) {
-            if (rfbShouldSendNewCursor(cl) || (rfbShouldSendNewPosition(cl)))
-                pthread_cond_signal(&cl->updateCond);
-        }
-        rfbReleaseClientIterator(iterator);
+    // Notify each client
+    while ((cl = rfbClientIteratorNext(iterator)) != NULL) {
+        if (rfbShouldSendNewCursor(cl) || (rfbShouldSendNewPosition(cl)))
+            pthread_cond_signal(&cl->updateCond);
     }
+    rfbReleaseClientIterator(iterator);
 }
 
 #pragma mark -
