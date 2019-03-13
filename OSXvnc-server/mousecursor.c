@@ -19,7 +19,7 @@
 
 #include "CGS.h"
 
-static int lastCursorSeed = 0;
+static int lastCursorSeed = -1;
 static int maxFailsRemaining = 8;
 static CGPoint lastCursorPosition;
 
@@ -73,10 +73,8 @@ void setCursorVisibility(Bool isVisible) {
     CGSSetConnectionProperty(_CGSDefaultConnection(), _CGSDefaultConnection(), propertyString, isVisible ? kCFBooleanFalse : kCFBooleanTrue);
     CFRelease(propertyString);
     if (isVisible) {
-        CGDisplayHideCursor(0);
         CGDisplayShowCursor(0);
     } else {
-        CGDisplayShowCursor(0);
         CGDisplayHideCursor(0);
     }
 }

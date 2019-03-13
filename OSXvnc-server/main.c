@@ -1209,7 +1209,6 @@ int main(int argc, char *argv[]) {
     // This segment is what is responsible for causing the server to shutdown when a user logs out
     // The problem being that OS X sends it first a SIGTERM and then a SIGKILL (un-trappable)
     // Presumable because it's running a Carbon Event loop
-    const NSTimeInterval cursorVisibilityRefreshInterval = 5;
     if (1) {
         OSStatus resultCode = 0;
 
@@ -1221,7 +1220,7 @@ int main(int argc, char *argv[]) {
                 Bool shouldSyncCursorVisibility = 0 == lastCursorVisibilitySync;
                 if (lastCursorVisibilitySync > 0) {
                     uint64_t nsElapsed = (mach_absolute_time() - lastCursorVisibilitySync) * timebaseInfo.numer / timebaseInfo.denom;
-                    shouldSyncCursorVisibility = 1.0 * nsElapsed / NSEC_PER_SEC >= cursorVisibilityRefreshInterval;
+                    shouldSyncCursorVisibility = 1.0 * nsElapsed / NSEC_PER_SEC >= 1.0;
                 }
                 if (shouldSyncCursorVisibility) {
                     rfbSetCursorVisibility(FALSE);
