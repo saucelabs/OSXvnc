@@ -79,18 +79,18 @@ void setCursorVisibility(Bool isVisible) {
     }
 }
 
-void loadCurrentCursorData() {
+Bool loadCurrentCursorData() {
     CGError err;
     CGSConnectionRef connection = getConnection();
 
 	if (!connection) {
 		if (!maxFailsRemaining)
-			return;
+			return FALSE;
 	}
 
     if (CGSGetGlobalCursorDataSize(connection, &cursorDataSize) != kCGErrorSuccess) {
         rfbLog("Error obtaining cursor data - cursor not sent");
-        return;
+        return FALSE;
     }
 
     if (cursorData) {
@@ -114,7 +114,7 @@ void loadCurrentCursorData() {
         // free(cursorData);
         cursorData = NULL;
         rfbLog("Error obtaining cursor data - cursor not sent");
-        return;
+        return FALSE;
     }
 
     cursorFormat.depth = (cursorDepth == 32 ? 24 : cursorDepth);
@@ -179,6 +179,7 @@ void loadCurrentCursorData() {
             cursorRowData += cursorRowBytes;
         }
     }
+    return TRUE;
 }
 
 // Just for logging
@@ -248,10 +249,9 @@ void rfbCheckForCursorChange() {
 	if (!CGPointEqualToPoint(lastCursorPosition, cursorLoc)) {
 		lastCursorPosition = cursorLoc;
 	}
-	if (lastCursorSeed != currentSeed) {
+	if (lastCursorSeed != currentSeed && loadCurrentCursorData()) {
         // Record first in case another change occurs after notifying clients
         lastCursorSeed = currentSeed;
-        loadCurrentCursorData();
 	}
 	pthread_mutex_unlock(&cursorMutex);
 
