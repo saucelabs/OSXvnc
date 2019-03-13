@@ -1220,7 +1220,7 @@ int main(int argc, char *argv[]) {
                 Bool shouldSyncCursorVisibility = 0 == lastCursorVisibilitySync;
                 if (lastCursorVisibilitySync > 0) {
                     uint64_t nsElapsed = (mach_absolute_time() - lastCursorVisibilitySync) * timebaseInfo.numer / timebaseInfo.denom;
-                    shouldSyncCursorVisibility = 1.0 * nsElapsed / NSEC_PER_SEC >= 1.0;
+                    shouldSyncCursorVisibility = 1.0 * nsElapsed / NSEC_PER_SEC >= 0.5;
                 }
                 if (shouldSyncCursorVisibility) {
                     rfbSetCursorVisibility(FALSE);
