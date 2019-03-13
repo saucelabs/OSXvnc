@@ -739,7 +739,7 @@ void rfbProcessClientNormalMessage(rfbClientPtr cl) {
                     case rfbEncodingRichCursor:
                         rfbLog("\tEnabling Cursor Shape protocol extension for client %s", cl->host);
                         cl->useRichCursorEncoding = TRUE;
-                        cl->currentCursorSeed = 0;
+                        cl->currentCursorSeed = -1;
                         break;
                     case rfbEncodingPointerPos:
                         rfbLog("\tEnabling Cursor Position protocol extension for client %s", cl->host);

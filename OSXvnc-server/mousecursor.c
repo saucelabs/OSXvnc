@@ -19,7 +19,7 @@
 
 #include "CGS.h"
 
-static int lastCursorSeed = 0;
+static int lastCursorSeed = -1;
 static int maxFailsRemaining = 8;
 static CGPoint lastCursorPosition;
 
@@ -68,29 +68,29 @@ CGPoint currentCursorLoc() {
     return cursorLoc;
 }
 
-void setCursorVisibility(Bool isVisible, CGDirectDisplayID displayID) {
+void setCursorVisibility(Bool isVisible) {
     CFStringRef propertyString = CFStringCreateWithCString(NULL, "SetsCursorInBackground", kCFStringEncodingUTF8);
     CGSSetConnectionProperty(_CGSDefaultConnection(), _CGSDefaultConnection(), propertyString, isVisible ? kCFBooleanFalse : kCFBooleanTrue);
     CFRelease(propertyString);
     if (isVisible) {
-        CGDisplayShowCursor(displayID);
+        CGDisplayShowCursor(0);
     } else {
-        CGDisplayHideCursor(displayID);
+        CGDisplayHideCursor(0);
     }
 }
 
-void loadCurrentCursorData() {
+Bool loadCurrentCursorData() {
     CGError err;
     CGSConnectionRef connection = getConnection();
 
 	if (!connection) {
 		if (!maxFailsRemaining)
-			return;
+			return FALSE;
 	}
 
     if (CGSGetGlobalCursorDataSize(connection, &cursorDataSize) != kCGErrorSuccess) {
         rfbLog("Error obtaining cursor data - cursor not sent");
-        return;
+        return FALSE;
     }
 
     if (cursorData) {
@@ -114,7 +114,7 @@ void loadCurrentCursorData() {
         // free(cursorData);
         cursorData = NULL;
         rfbLog("Error obtaining cursor data - cursor not sent");
-        return;
+        return FALSE;
     }
 
     cursorFormat.depth = (cursorDepth == 32 ? 24 : cursorDepth);
@@ -179,6 +179,7 @@ void loadCurrentCursorData() {
             cursorRowData += cursorRowBytes;
         }
     }
+    return TRUE;
 }
 
 // Just for logging
@@ -241,35 +242,29 @@ void GetCursorInfo() {
 // We call this to see if we have a new cursor and should notify clients to do an update
 // Or if cursor has moved
 void rfbCheckForCursorChange() {
-	Bool sendNotice = FALSE;
     CGPoint cursorLoc = currentCursorLoc();
 	int currentSeed = CGSCurrentCursorSeed();
 
 	pthread_mutex_lock(&cursorMutex);
 	if (!CGPointEqualToPoint(lastCursorPosition, cursorLoc)) {
 		lastCursorPosition = cursorLoc;
-		sendNotice = TRUE;
 	}
-	if (lastCursorSeed != currentSeed) {
+	if (lastCursorSeed != currentSeed && loadCurrentCursorData()) {
         // Record first in case another change occurs after notifying clients
         lastCursorSeed = currentSeed;
-        loadCurrentCursorData();
-		sendNotice = TRUE;
 	}
 	pthread_mutex_unlock(&cursorMutex);
 
     //rfbLog("Check For Cursor Change");
-    if (sendNotice) {
-        rfbClientIteratorPtr iterator = rfbGetClientIterator();
-        rfbClientPtr cl;
+    rfbClientIteratorPtr iterator = rfbGetClientIterator();
+    rfbClientPtr cl;
 
-        // Notify each client
-        while ((cl = rfbClientIteratorNext(iterator)) != NULL) {
-            if (rfbShouldSendNewCursor(cl) || (rfbShouldSendNewPosition(cl)))
-                pthread_cond_signal(&cl->updateCond);
-        }
-        rfbReleaseClientIterator(iterator);
+    // Notify each client
+    while ((cl = rfbClientIteratorNext(iterator)) != NULL) {
+        if (rfbShouldSendNewCursor(cl) || (rfbShouldSendNewPosition(cl)))
+            pthread_cond_signal(&cl->updateCond);
     }
+    rfbReleaseClientIterator(iterator);
 }
 
 #pragma mark -
@@ -282,8 +277,8 @@ Bool rfbShouldSendNewCursor(rfbClientPtr cl) {
         return (cl->currentCursorSeed != lastCursorSeed);
 }
 
-void rfbSetCursorVisibility(Bool isVisible, CGDirectDisplayID displayID) {
-    setCursorVisibility(isVisible, displayID);
+void rfbSetCursorVisibility(Bool isVisible) {
+    setCursorVisibility(isVisible);
 }
 
 Bool rfbShouldSendNewPosition(rfbClientPtr cl) {
